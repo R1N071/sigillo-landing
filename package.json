@@ -1,0 +1,19 @@
+{
+  "name": "sigillo-landing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sigillo - the black box for autonomous machines. Landing page.",
+  "scripts": {
+    "build": "esbuild js/main.js --bundle --format=iife --minify --outfile=js/bundle.js",
+    "dev": "python3 -m http.server 4173",
+    "watch": "esbuild js/main.js --bundle --format=iife --outfile=js/bundle.js --watch"
+  },
+  "dependencies": {
+    "animejs": "4.0.2",
+    "motion": "12.0.0",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

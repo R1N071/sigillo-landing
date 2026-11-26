@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sigillo - The black box for autonomous machines</title>
+  <meta name="description" content="Sigillo seals what autonomous machines actually did into tamper-evident evidence, checked against formal task models, for the EU Machinery Regulation.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <meta name="theme-color" content="#0A0A0B">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Sigillo - The black box for autonomous machines">
+  <meta property="og:description" content="Tamper-evident, vendor-neutral evidence of what your robots actually did. Machinery Regulation (EU) 2023/1230 applies 20 January 2027.">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="wordmark" href="#top" aria-label="Sigillo home">
+      <svg class="seal-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1" opacity="0.55"/>
+        <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+      </svg>
+      SIGILLO
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#rules">The rules</a>
+      <a href="#box">The box</a>
+      <a href="#demo">The demo</a>
+      <a href="#audits">Audits</a>
+    </nav>
+    <a class="btn btn-primary btn-nav" href="mailto:hello@sigillo-robotics.eu?subject=Readiness%20audit">Book a readiness audit</a>
+  </header>
+
+  <main>
+    <!-- 1 · HERO -->
+    <section class="hero" id="top">
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="hero-copy">
+        <h1>Every robot<br><span class="accent">needs a black box.</span></h1>
+        <p class="hero-sub">Sigillo seals what your machines actually did into tamper-evident evidence, checked against formal task models.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary magnetic" href="mailto:hello@sigillo-robotics.eu?subject=Readiness%20audit">Book a readiness audit</a>
+          <a class="btn btn-ghost magnetic" href="#demo">Try the tamper demo</a>
+        </div>
+      </div>
+      <div class="hero-foot" aria-hidden="true">
+        <span class="mono">Regulation (EU) 2023/1230</span>
+        <span class="mono">ROS 2 · VDA 5050 · ISO 21423</span>
+      </div>
+    </section>
+
+    <!-- 2 · COUNTDOWN BAND -->
+    <section class="band countdown" id="rules">
+      <p class="mono band-kicker">Machinery Regulation, applies unit by unit</p>
+      <h2>The date is fixed.</h2>
+      <div class="countdown-core" role="timer" aria-label="Countdown to 20 January 2027">
+        <span class="count-days" id="count-days">55</span>
+        <span class="count-unit">days<br>to go</span>
+        <span class="count-sub mono" id="count-clock">00 : 00 : 00 : 00</span>
+      </div>
+      <p class="band-copy">From <strong>20 January 2027</strong>, every machine placed on the EU market must collect evidence of interventions in its safety software, and keep a five-year tracing log it can hand to a national authority on a reasoned request.</p>
+      <p class="cite mono">Annex III 1.1.9 and 1.2.1(f), Regulation (EU) 2023/1230</p>
+    </section>
+
+    <!-- 3 · THE TWO CLAUSES -->
+    <section class="clauses">
+      <h2 class="section-h">Two clauses change what a robot must prove.</h2>
+      <div class="clause-grid">
+        <article class="clause clause-a">
+          <p class="clause-id mono">Annex III · 1.1.9</p>
+          <h3>Intervention evidence</h3>
+          <p>The machine must identify its safety-critical software at all times, in an easily accessible form, and collect evidence of legitimate or illegitimate interventions and configuration changes.</p>
+        </article>
+        <article class="clause clause-b">
+          <p class="clause-id mono">Annex III · 1.2.1(f)</p>
+          <h3>Five-year tracing log</h3>
+          <p>A tracing log of interventions and of safety-software versions, enabled for five years after upload, producible on a reasoned request from a competent national authority.</p>
+        </article>
+      </div>
+      <p class="clauses-note mono">prEN 50742, the candidate harmonised standard for 1.1.9, is still a draft. There is no presumption of conformity yet. The Commission's Expert Group endorsed guide chapters on these clauses on 5 November 2026.</p>
+    </section>
+
+    <!-- 4 · PROBLEM -->
+    <section class="problem">
+      <h2 class="section-h">Today's logs are not evidence.</h2>
+      <div class="ledger">
+        <div class="ledger-row">
+          <span class="ledger-idx mono">01</span>
+          <h3>Mutable</h3>
+          <p>Anyone with access can edit a ROS bag, a fleet database or a PLC record after an incident. Nothing breaks when they do.</p>
+        </div>
+        <div class="ledger-row">
+          <span class="ledger-idx mono">02</span>
+          <h3>Vendor-specific</h3>
+          <p>Every fleet manager exports its own format. A mixed fleet has no single timeline, so cross-vendor incidents become finger-pointing.</p>
+        </div>
+        <div class="ledger-row">
+          <span class="ledger-idx mono">03</span>
+          <h3>Scattered</h3>
+          <p>The truth sits across robots, orchestration layers and site systems. After an incident it cannot be reconstructed into one defensible story.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 · PIPELINE / EXPLODED VIEW -->
+    <section class="pipeline" id="box">
+      <div class="pipeline-sticky">
+        <canvas id="explode-canvas" aria-hidden="true"></canvas>
+        <svg class="leader-lines" id="leader-lines" aria-hidden="true"></svg>
+        <div class="layer-chips" id="layer-chips" aria-hidden="true">
+          <div class="chip" data-layer="1" data-slot="0"><span class="mono">01</span>Ingest</div>
+          <div class="chip" data-layer="2" data-slot="1"><span class="mono">02</span>Hash chain</div>
+          <div class="chip" data-layer="3" data-slot="2"><span class="mono">03</span>TPM 2.0</div>
+          <div class="chip" data-layer="4" data-slot="3"><span class="mono">04</span>WORM vault</div>
+          <div class="chip" data-layer="0" data-slot="4"><span class="mono">05</span>Seal</div>
+        </div>
+      </div>
+      <div class="pipeline-steps">
+        <h2 class="section-h">Five stages from event to evidence.</h2>
+        <div class="step" data-layer="1">
+          <p class="step-idx mono">Stage 1</p>
+          <h3>Watch everything that matters</h3>
+          <p>An edge agent subscribes to ROS 2 topics and MCAP files, VDA 5050 and ISO 21423 fleet messages, and safety-controller events over OPC UA. Software and configuration inventory, interventions, protective stops, mission events.</p>
+        </div>
+        <div class="step" data-layer="2">
+          <p class="step-idx mono">Stage 2</p>
+          <h3>Chain every event</h3>
+          <p>Each event enters a SHA-256 hash chain in deterministic CBOR. Edit one row and every hash after it breaks. The chain is the spine of every bundle we export.</p>
+        </div>
+        <div class="step" data-layer="3">
+          <p class="step-idx mono">Stage 3</p>
+          <h3>Sign the roots in hardware</h3>
+          <p>Merkle roots are signed with a non-exportable ECDSA key inside a TPM 2.0 secure element, and sealed with qualified RFC 3161 timestamps. The log carries its own proof of time.</p>
+        </div>
+        <div class="step" data-layer="4">
+          <p class="step-idx mono">Stage 4</p>
+          <h3>Keep it uneditable for five years</h3>
+          <p>Store-and-forward at the edge, then WORM object storage with five-year retention per software version. No one can quietly rewrite last month.</p>
+        </div>
+        <div class="step" data-layer="0">
+          <p class="step-idx mono">Stage 5</p>
+          <h3>Hand over proof, not promises</h3>
+          <p>One click exports an evidence bundle: signed events, Merkle proofs, an SBOM, and a clause map to 1.1.9 and 1.2.1(f). Traces are checked against formal task models, below. An open-source verifier lets a notified body check it offline, without trusting us.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 · CONFORMANCE / PETRI NET -->
+    <section class="conformance">
+      <canvas id="petri-canvas" aria-hidden="true"></canvas>
+      <div class="conformance-copy">
+        <h2 class="section-h">What should have happened, formalised.</h2>
+        <p>Missions are modelled as Coloured Petri Nets, the same formalism used in safety research and our own tooling. Guards like <span class="mono inline-code">speed &le; zone limit while human present</span> become checkable facts. When a run skips a required step, the deviation is flagged and pinned to the signed event that proves it.</p>
+      </div>
+      <div class="deviation-feed" id="deviation-feed" aria-hidden="true"></div>
+    </section>
+
+    <!-- 7 · TAMPER DEMO -->
+    <section class="tamper" id="demo">
+      <h2 class="section-h">Try to break the seal.</h2>
+      <p class="tamper-intro">A technician raises a robot's speed limit, a protective stop follows, and someone deletes the parameter change from the raw log. Below is a real hash chain, computed live in your browser. Edit or delete an event, then verify.</p>
+      <div class="demo-shell">
+        <div class="demo-bar">
+          <span class="mono demo-title">PoPW Event Chain v0 - live demo</span>
+          <div class="demo-actions">
+            <button class="btn btn-small" id="btn-edit" type="button">Edit event 03</button>
+            <button class="btn btn-small" id="btn-delete" type="button">Delete event 06</button>
+            <button class="btn btn-small" id="btn-restore" type="button">Restore</button>
+            <button class="btn btn-small btn-verify" id="btn-verify" type="button">Verify chain</button>
+          </div>
+        </div>
+        <div class="demo-status" id="demo-status" role="status">
+          <span class="status-dot ok" id="status-dot"></span>
+          <span class="mono" id="status-text">Chain intact - 8 events sealed</span>
+        </div>
+        <ol class="event-log" id="event-log"></ol>
+        <div class="sealed-panel" id="sealed-panel" hidden>
+          <p class="mono sealed-title">Sealed authority copy - RFC 3161 timestamp 14:02:11</p>
+          <p class="sealed-line">The sealed record still shows the intervention: <strong>operator r.rossi raised speed_limit zone_B to 1.8 m/s</strong>, remote, 14:01:58. The authority reads who, what and when, even where the local log was edited.</p>
+        </div>
+        <p class="demo-note mono">SHA-256 chaining runs on this page with WebCrypto. No server, no tricks.</p>
+      </div>
+    </section>
+
+    <!-- 8 · MARKET / STATS -->
+    <section class="stats">
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-num" data-count="87" data-suffix="%">0%</span>
+          <p>of robotics companies report a safe-stop system.</p>
+        </div>
+        <div class="stat stat-accent">
+          <span class="stat-num" data-count="6" data-suffix="%">0%</span>
+          <p>publish a safety page at all.</p>
+        </div>
+        <div class="quote-card">
+          <span class="quote-stat"><span data-count="65" data-prefix="25-">25-</span>%</span>
+          <blockquote>"Controls already cut liability rates 25-65%, but terms won't follow until the evidence is certified."</blockquote>
+          <p class="quote-attr">Koop, In Bots We Trust 2026 - 392 US robotics companies</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 · AUDITS / PRICING -->
+    <section class="pricing" id="audits">
+      <p class="eyebrow mono">Machinery Regulation readiness</p>
+      <h2 class="section-h">Start with a readiness audit.</h2>
+      <p class="pricing-sub">Fixed scope, fixed price, ex VAT. Every audit doubles as discovery for the recorder, and 50% of the fee is credited against a year-one subscription signed within 90 days.</p>
+      <div class="tiers">
+        <article class="tier">
+          <h3>Snapshot</h3>
+          <p class="tier-price">&euro;12k <span class="tier-dur mono">2 weeks</span></p>
+          <ul>
+            <li>1 machine family</li>
+            <li>1.1.9 / 1.2.1(f) gap matrix</li>
+            <li>Prioritised remediation plan</li>
+            <li>Documents review + 1 workshop</li>
+          </ul>
+          <a class="btn btn-ghost" href="mailto:hello@sigillo-robotics.eu?subject=Snapshot%20audit">Book a readiness audit</a>
+        </article>
+        <article class="tier tier-lead">
+          <p class="tier-pill mono">Lead offer</p>
+          <h3>Standard</h3>
+          <p class="tier-price">&euro;25k <span class="tier-dur mono">4 to 5 weeks</span></p>
+          <ul>
+            <li>Up to 3 machine families or 1 mixed-fleet site</li>
+            <li>Software and safety-config register</li>
+            <li>Tracing-log design, five-year retention</li>
+            <li>"Reasoned request" playbook</li>
+            <li>Reconstruction of 1 past cross-vendor incident</li>
+          </ul>
+          <a class="btn btn-primary" href="mailto:hello@sigillo-robotics.eu?subject=Standard%20audit">Book a readiness audit</a>
+        </article>
+        <article class="tier">
+          <h3>Plus</h3>
+          <p class="tier-price">&euro;40k <span class="tier-dur mono">6 weeks</span></p>
+          <ul>
+            <li>Multi-site or OEM product line</li>
+            <li>Everything in Standard</li>
+            <li>60-day PoPW pilot on up to 10 robots</li>
+            <li>Sample evidence bundle for the technical file</li>
+          </ul>
+          <a class="btn btn-ghost" href="mailto:hello@sigillo-robotics.eu?subject=Plus%20audit">Book a readiness audit</a>
+        </article>
+      </div>
+      <p class="pricing-note mono">Sigillo is not a notified body and does not perform conformity assessment, certification or legal advice.</p>
+    </section>
+
+    <!-- 10 · FOUNDER -->
+    <section class="founder">
+      <h2 class="section-h">Built on formal methods, not dashboards.</h2>
+      <p class="founder-copy">Sigillo is founded by Francesco Rinaldi, an Italian-British engineer based in the EU's machinery heartland, now recruiting a functional-safety co-founder with ISO 13849, IEC 61508 and ISO 10218 depth.</p>
+      <div class="facts">
+        <div class="fact">
+          <p class="fact-k mono">Research</p>
+          <p>Leverhulme-funded work on Coloured Petri Nets and stochastic simulation on HPC.</p>
+        </div>
+        <div class="fact">
+          <p class="fact-k mono">Systems</p>
+          <p>Invented IBM MQ's first distributed multi-agent system. Shipped IoT and ML in the field.</p>
+        </div>
+        <div class="fact">
+          <p class="fact-k mono">Operator</p>
+          <p>VC-backed CEO. Italian and British, working from Turin across EU robotics clusters.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 · FINAL CTA -->
+    <section class="cta-final" id="contact">
+      <h2>The seal is set for 20 January.</h2>
+      <p class="cta-sub">Be ready before the first reasoned request arrives. Thirty minutes, no slideware: we map your fleet to 1.1.9 and 1.2.1(f) and tell you exactly what to log.</p>
+      <a class="btn btn-primary btn-large magnetic" href="mailto:hello@sigillo-robotics.eu?subject=Readiness%20audit">Book a readiness audit</a>
+      <p class="mono cta-count" id="cta-count">55 days to go</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="foot-row">
+      <p class="foot-word mono">SIGILLO <span class="foot-sep">·</span> EVIDENCE LAYER FOR AUTONOMOUS MACHINES</p>
+      <p class="foot-meta mono">Turin, Italy</p>
+    </div>
+    <p class="foot-legal">Sigillo is a working name. PoPW, Proof of Physical Work, is the product protocol. Sigillo is not a notified body and does not perform conformity assessment, certification or legal advice. The manufacturer remains solely responsible for compliance with Regulation (EU) 2023/1230 and other applicable law.</p>
+  </footer>
+
+  <script>
+    window.__sigilloError = '';
+    window.addEventListener('error', function (e) {
+      window.__sigilloError = (e.message || '') + ' @ ' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      window.__sigilloError = 'promise: ' + String((e.reason && e.reason.message) || e.reason);
+    });
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (window.__sigilloBooted) return;
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:9999;padding:12px 16px;background:#2b0f11;border:1px solid #8E2E32;color:#ffb4b6;font:12px/1.6 ui-monospace,monospace;border-radius:4px;max-width:62ch';
+        d.textContent = 'Sigillo: page scripts did not start. ' + (window.__sigilloError ? 'Error: ' + window.__sigilloError : 'Serve this folder with "python3 -m http.server" or reload the page.');
+        document.body.appendChild(d);
+      }, 2500);
+    });
+  </script>
+  <script defer src="js/bundle.js"></script>
+</body>
+</html>
