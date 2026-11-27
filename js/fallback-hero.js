@@ -1,6 +1,7 @@
-// 2D isometric fallback for the hero: the sealed monolith.
-// Floating obsidian cube with a pulsing wax seal, hash spine feeding it,
-// particle stream, scan sweep and floor reflection. No WebGL required.
+// 2D fallback for the hero: the Wax Seal, drawn with canvas 2D.
+// A giant tilted disc of crimson wax, sigil embossed at its heart,
+// ember breathing inside, evidence motes streaming in, drips below,
+// and a stamp pulse that prints a glowing imprint on the floor.
 export function initFallbackHero(host, oldCanvas) {
   const canvas = document.createElement('canvas');
   canvas.id = 'hero-canvas';
@@ -10,13 +11,13 @@ export function initFallbackHero(host, oldCanvas) {
 
   const ctx = canvas.getContext('2d');
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC = '229,72,77';
 
   let W = 0, H = 0;
   const DPR = Math.min(devicePixelRatio || 1, 2);
-  let scale = 140, offX = 0, offY = 0;
+  let cx = 0, cy = 0, R = 200;          // seal disc
+  let offX = 0, offY = 0, scale = 90;    // iso floor
   let px = 0, py = 0, tpx = 0, tpy = 0;
-  let t = 0, ringT = 0, sweepT = 0;
+  let t = 0, ringT = 0;
 
   if (!REDUCED) {
     addEventListener('pointermove', (e) => {
@@ -32,83 +33,33 @@ export function initFallbackHero(host, oldCanvas) {
     canvas.height = Math.round(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     const wide = W / H > 1.05;
-    scale = wide ? Math.min(W * 0.10, H * 0.16) : Math.min(W * 0.19, H * 0.09, 78);
-    offX = wide ? W * 0.60 : W * 0.55;
-    offY = wide ? H * 0.70 : H * 0.82;
+    R = wide ? Math.min(W * 0.24, H * 0.27) : Math.min(W * 0.36, H * 0.17);
+    cx = wide ? W * 0.61 : W * 0.5;
+    cy = wide ? H * 0.36 : H * 0.52;
+    scale = wide ? Math.min(W * 0.10, H * 0.15) : Math.min(W * 0.12, H * 0.085);
+    offX = cx;
+    offY = wide ? H * 0.72 : H * 0.80;
   }
   place();
   new ResizeObserver(place).observe(canvas);
 
-  const CX = 0;        // monolith centre x (world)
-  const CY = 2.45;     // monolith centre y (world)
-  const CE = 0.85;     // half edge
+  const TILT = 0.86; // disc ellipse squash
 
   function P(x, y, z) {
     return [
-      (x - z) * 0.866 * scale + offX + px * 26 + Math.sin(t * 0.3) * 5,
+      (x - z) * 0.866 * scale + offX + px * 26,
       ((x + z) * 0.5 - y) * scale + offY + py * 14,
     ];
   }
 
-  function poly(pts, fill, stroke, glow, lw) {
+  function ellipseAt(x, y, rx, ry, rot) {
     ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.closePath();
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) {
-      ctx.save();
-      if (glow) { ctx.shadowColor = `rgba(${ACC},0.95)`; ctx.shadowBlur = glow; }
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = lw || 1.6;
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  function cubeFaces(cx, cy, cz, half, tone) {
-    const x1 = cx - half, x2 = cx + half, z1 = cz - half, z2 = cz + half;
-    const y1 = cy - half, y2 = cy + half;
-    const top = [P(x1, y2, z1), P(x2, y2, z1), P(x2, y2, z2), P(x1, y2, z2)];
-    poly(top, tone.top, tone.stroke, tone.glow, tone.lw);
-    if (tone.sheen) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(top[0][0], top[0][1]);
-      for (let i = 1; i < 4; i++) ctx.lineTo(top[i][0], top[i][1]);
-      ctx.closePath();
-      ctx.clip();
-      const gr = ctx.createLinearGradient(top[0][0], top[0][1], top[2][0], top[2][1]);
-      gr.addColorStop(0, 'rgba(255,255,255,0.16)');
-      gr.addColorStop(0.55, 'rgba(255,255,255,0.01)');
-      gr.addColorStop(1, 'rgba(0,0,0,0.18)');
-      ctx.fillStyle = gr;
-      ctx.fillRect(Math.min(top[0][0], top[2][0]) - 600, Math.min(top[0][1], top[2][1]) - 600, 1300, 1300);
-      ctx.restore();
-    }
-    poly([P(x2, y1, z1), P(x2, y1, z2), P(x2, y2, z2), P(x2, y2, z1)], tone.right, tone.stroke, 0);
-    poly([P(x1, y1, z2), P(x2, y1, z2), P(x2, y2, z2), P(x1, y2, z2)], tone.front, tone.stroke, 0);
-    return { top, right: [P(x2, y1, z1), P(x2, y1, z2), P(x2, y2, z2), P(x2, y2, z1)], front: [P(x1, y1, z2), P(x2, y1, z2), P(x2, y2, z2), P(x1, y2, z2)] };
-  }
-
-  // circle lying on the front face (constant z), correctly foreshortened
-  function faceDisc(x, y, z, r, fill, stroke, glow, lw) {
-    const [sx, sy] = P(x, y, z);
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, r * scale * 1.22, r * scale * 0.71, Math.PI / 6, 0, Math.PI * 2);
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    if (stroke) {
-      ctx.save();
-      if (glow) { ctx.shadowColor = `rgba(${ACC},0.95)`; ctx.shadowBlur = glow; }
-      ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke();
-      ctx.restore();
-    }
+    ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2);
   }
 
   function ellipseFloor(x, y, z, r, stroke, alpha) {
     const [sx, sy] = P(x, y, z);
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, r * 1.2247 * scale, r * 0.7071 * scale, 0, 0, Math.PI * 2);
+    ellipseAt(sx, sy, r * 1.2247 * scale, r * 0.7071 * scale, 0);
     ctx.strokeStyle = stroke;
     ctx.globalAlpha = alpha;
     ctx.lineWidth = 2;
@@ -116,131 +67,160 @@ export function initFallbackHero(host, oldCanvas) {
     ctx.globalAlpha = 1;
   }
 
-  // ---------- spine ----------
-  const spinePts = [];
-  for (let i = 0; i < 8; i++) {
-    const u = i / 7;
-    // quadratic bezier: P0(1.35,-0.15,0.75) P1(1.05,1.15,0.95) P2(-0.62,1.52,0.55)
-    const p0x = 1.38, p0y = 0.16, p0z = 0.72;
-    const p1x = 1.18, p1y = 1.2, p1z = 0.92;
-    const p2x = -0.62, p2y = 1.52, p2z = 0.55;
-    const v = 1 - u;
-    spinePts.push({
-      x: v * v * p0x + 2 * v * u * p1x + u * u * p2x,
-      y: v * v * p0y + 2 * v * u * p1y + u * u * p2y,
-      z: v * v * p0z + 2 * v * u * p1z + u * u * p2z,
-      phase: i * 0.9,
+  // wax blobs around the rim (irregular edge)
+  const rimBlobs = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.35;
+    rimBlobs.push({
+      a,
+      r: 0.97 + ((i * 37) % 10) / 90,
+      s: 0.05 + ((i * 53) % 10) / 55,
     });
   }
 
-  // ---------- particles ----------
-  const flow = [
-    spinePts[0], spinePts[3], spinePts[7],
-    { x: -0.5, y: CY - 0.35, z: 1.6 },
-    { x: 0, y: CY + 0.12, z: 1.6 },
-    { x: 0, y: CY + 0.12, z: 0.95 },
+  // drips below
+  const drips = [
+    { a: 1.25, len: 0.34, w: 0.055 },
+    { a: 2.35, len: 0.46, w: 0.045 },
+    { a: 4.05, len: 0.28, w: 0.06 },
   ];
-  const particles = [];
-  for (let i = 0; i < 90; i++) particles.push({ t: Math.random(), sp: 0.045 + Math.random() * 0.05 });
 
-  // simple multi-segment path sampler in screen space
-  function sampleFlow(u) {
-    const seg = Math.min(flow.length - 2, Math.floor(u * (flow.length - 1)));
-    const su = (u * (flow.length - 1)) - seg;
-    const a = P(flow[seg].x, flow[seg].y, flow[seg].z);
-    const b = P(flow[seg + 1].x, flow[seg + 1].y, flow[seg + 1].z);
-    return [a[0] + (b[0] - a[0]) * su, a[1] + (b[1] - a[1]) * su];
-  }
+  // particles: stream into the seal + rim orbit
+  const flow = [];
+  for (let i = 0; i < 90; i++) flow.push({ t: Math.random(), sp: 0.04 + Math.random() * 0.05 });
+  const orbit = [];
+  for (let i = 0; i < 22; i++) orbit.push({ ph: (i / 22) * Math.PI * 2, sink: Math.random() });
 
-  // dust
   const dust = [];
   for (let i = 0; i < 26; i++) dust.push({ x: Math.random(), y: Math.random(), sp: 0.02 + Math.random() * 0.05 });
 
-  function drawMonolith(alpha, mirrorFlip) {
-    const bob = Math.sin(t * 0.9) * 0.07;
-    const cy = CY + bob;
-    const tone = {
-      top: '#7d8494', right: '#3a3f4a', front: '#262b33',
-      stroke: `rgba(255,99,105,${alpha})`, glow: 16, lw: 2.2, sheen: true,
-    };
+  function stampFlare() {
+    const st = REDUCED ? 0.5 : (t * 0.14) % 1;
+    return st < 0.14 ? 1 - st / 0.14 : 0;
+  }
+
+  function drawDisc(fx, fy, alpha, flip) {
     ctx.save();
-    if (mirrorFlip) {
-      const [fx, fy] = P(0, 0, 0);
-      ctx.translate(0, 2 * fy);
+    if (flip) {
+      const [, fy0] = P(0, 0, 0);
+      ctx.translate(0, 2 * fy0);
       ctx.scale(1, -1);
-      ctx.globalAlpha = 0.16;
+      ctx.globalAlpha = 0.15;
+    } else if (alpha < 1) {
+      ctx.globalAlpha = alpha;
     }
-    if (alpha < 1) ctx.globalAlpha = alpha;
+    const bob = Math.sin(t * 0.8) * R * 0.02;
+    const dx = fx, dy = fy + bob;
 
-    const faces = cubeFaces(CX, cy, 0, CE, tone);
+    // halo behind the wax
+    const halo = ctx.createRadialGradient(dx, dy, R * 0.2, dx, dy, R * 1.55);
+    const breathe = 0.5 + Math.sin(t * 1.6) * 0.15;
+    halo.addColorStop(0, `rgba(255,99,105,${(0.5 * breathe + flareCache * 0.35) * (flip ? 0.4 : 1)})`);
+    halo.addColorStop(1, 'rgba(255,99,105,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(dx - R * 1.6, dy - R * 1.6, R * 3.2, R * 3.2);
 
-    // inner frame etch
-    const half = CE * 0.83;
-    const x1 = -half, x2 = half, z1 = -half, z2 = half, y1 = cy - half, y2 = cy + half;
-    poly([P(x1, y2, z1), P(x2, y2, z1), P(x2, y2, z2), P(x1, y2, z2)], null, `rgba(${ACC},0.35)`, 0, 1.2);
-    poly([P(x1, y1, z2), P(x2, y1, z2), P(x2, y2, z2), P(x1, y2, z2)], null, `rgba(${ACC},0.35)`, 0, 1.2);
-
-    // corner studs
-    for (const sx of [-CE, CE]) for (const sy of [cy - CE, cy + CE]) for (const sz of [-CE, CE]) {
-      const [stx, sty] = P(sx, sy, sz);
-      ctx.beginPath();
-      ctx.arc(stx, sty, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#3c414d';
+    // rim blobs (wax edge irregularity)
+    for (const b of rimBlobs) {
+      const bx = dx + Math.cos(b.a) * R * b.r;
+      const by = dy + Math.sin(b.a) * R * b.r * TILT;
+      ellipseAt(bx, by, R * b.s, R * b.s * TILT, 0);
+      ctx.fillStyle = '#5a151a';
       ctx.fill();
     }
 
-    // wax seal on the front face
-    const [gcx, gcy] = P(0, cy + 0.12, CE + 0.02);
-    if (!mirrorFlip) {
-      const halo = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, scale * 1.0);
-      halo.addColorStop(0, `rgba(255,99,105,${0.7 * alpha})`);
-      halo.addColorStop(1, 'rgba(255,99,105,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(gcx - scale, gcy - scale, scale * 2, scale * 2);
-    }
-    faceDisc(0, cy + 0.12, CE + 0.02, 0.34, `rgba(229,72,77,${0.96 * alpha})`, `rgba(255,180,182,${0.9 * alpha})`, 26 * alpha, 3);
-    faceDisc(0, cy + 0.12, CE + 0.06, 0.13, `rgba(255,214,216,${0.95 * alpha})`, null, 14, 0);
-    faceDisc(0, cy + 0.12, CE + 0.05, 0.42, null, `rgba(${ACC},${0.6 * alpha})`, 10, 1.4);
+    // wax body
+    const body = ctx.createRadialGradient(dx - R * 0.25, dy - R * 0.3, R * 0.1, dx, dy, R * 1.05);
+    body.addColorStop(0, `rgba(198,66,72,1)`);
+    body.addColorStop(0.55, `rgba(134,34,40,1)`);
+    body.addColorStop(1, `rgba(70,17,21,1)`);
+    ellipseAt(dx, dy, R, R * TILT, 0);
+    ctx.fillStyle = body;
+    ctx.fill();
 
+    // ember breathing from within
+    const ember = ctx.createRadialGradient(dx, dy, 0, dx, dy, R * 0.9);
+    const e = breathe * 0.42 + flareCache * 0.4;
+    ember.addColorStop(0, `rgba(255,110,116,${e})`);
+    ember.addColorStop(0.6, `rgba(200,50,57,${e * 0.55})`);
+    ember.addColorStop(1, 'rgba(190,45,52,0)');
+    ellipseAt(dx, dy, R * 0.98, R * TILT * 0.98, 0);
+    ctx.fillStyle = ember;
+    ctx.fill();
+
+    // gloss crescent
+    ctx.save();
+    ellipseAt(dx, dy, R, R * TILT, 0);
+    ctx.clip();
+    const gloss = ctx.createLinearGradient(dx - R, dy - R * TILT, dx + R * 0.2, dy + R * 0.2);
+    gloss.addColorStop(0, 'rgba(255,240,238,0.2)');
+    gloss.addColorStop(0.4, 'rgba(255,240,238,0.03)');
+    gloss.addColorStop(1, 'rgba(0,0,0,0.12)');
+    ctx.fillStyle = gloss;
+    ctx.fillRect(dx - R, dy - R, R * 2, R * 2);
     ctx.restore();
 
-    // scan sweep across the faces
-    if (!mirrorFlip && !REDUCED) {
-      const sy = cy + (-CE - 0.08) + sweepT * (2 * CE + 0.16);
-      const bandY = P(0, sy, 0)[1];
-      const fade = sweepT < 0.08 ? sweepT / 0.08 : sweepT > 0.9 ? (1 - sweepT) / 0.1 : 1;
-      ctx.save();
-      ctx.beginPath();
-      const f = faces;
-      ctx.moveTo(f.front[0][0], f.front[0][1]);
-      f.front.slice(1).forEach((p) => ctx.lineTo(p[0], p[1]));
-      ctx.moveTo(f.right[0][0], f.right[0][1]);
-      f.right.slice(1).forEach((p) => ctx.lineTo(p[0], p[1]));
-      ctx.closePath();
-      ctx.clip();
-      const g = ctx.createLinearGradient(0, bandY - 8, 0, bandY + 8);
-      g.addColorStop(0, 'rgba(255,99,105,0)');
-      g.addColorStop(0.5, `rgba(255,99,105,${0.45 * fade})`);
-      g.addColorStop(1, 'rgba(255,99,105,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, bandY - 8, W, 16);
-      ctx.restore();
-    }
-    return faces;
+    // raised rim
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ellipseAt(dx, dy, R * 0.87, R * 0.87 * TILT, 0);
+    ctx.strokeStyle = `rgba(140,33,38,0.9)`;
+    ctx.lineWidth = R * 0.045;
+    ctx.stroke();
+    ctx.restore();
+
+    // ---------- sigil emboss ----------
+    const sig = (rr, lw) => {
+      // dark relief offset then bright stroke
+      ellipseAt(dx + lw * 0.5, dy + lw * 0.9, rr, rr * TILT, 0);
+      ctx.strokeStyle = 'rgba(26,7,9,0.85)';
+      ctx.lineWidth = lw * 1.6;
+      ctx.stroke();
+      ellipseAt(dx, dy, rr, rr * TILT, 0);
+      ctx.strokeStyle = `rgba(255,110,116,${0.75 + flareCache * 0.25})`;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,99,105,0.9)';
+    ctx.shadowBlur = 16 + flareCache * 30;
+    sig(R * 0.62, R * 0.03);
+    sig(R * 0.40, R * 0.02);
+    // heart of the sigil
+    ellipseAt(dx + 1, dy + 2, R * 0.09, R * 0.09 * TILT, 0);
+    ctx.fillStyle = 'rgba(26,7,9,0.85)';
+    ctx.fill();
+    ellipseAt(dx, dy, R * 0.085, R * 0.085 * TILT, 0);
+    const dot = ctx.createRadialGradient(dx, dy, 0, dx, dy, R * 0.1);
+    dot.addColorStop(0, `rgba(255,214,216,${0.95 + flareCache * 0.05})`);
+    dot.addColorStop(1, 'rgba(255,99,105,0.9)');
+    ctx.fillStyle = dot;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
   }
 
+  let flareCache = 0;
+
   function draw() {
+    flareCache = stampFlare();
     ctx.clearRect(0, 0, W, H);
+    const bob = Math.sin(t * 0.8) * R * 0.02;
+    const sx = cx + px * 24 + Math.sin(t * 0.3) * 4;
+    const sy = cy + bob + py * 12;
 
     // backdrop glow
-    const bg = ctx.createRadialGradient(offX, offY - scale * 2.4, 0, offX, offY - scale * 2.4, scale * 5.2);
-    bg.addColorStop(0, `rgba(${ACC},0.16)`);
-    bg.addColorStop(1, `rgba(${ACC},0)`);
+    const bg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 2.6);
+    bg.addColorStop(0, 'rgba(229,72,77,0.14)');
+    bg.addColorStop(1, 'rgba(229,72,77,0)');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
     // floor pool + grid
-    const pool = ctx.createRadialGradient(offX, offY, 0, offX, offY, scale * 4.6);
+    const pool = ctx.createRadialGradient(offX, offY, 0, offX, offY, scale * 4.8);
     pool.addColorStop(0, 'rgba(190,196,214,0.13)');
     pool.addColorStop(1, 'rgba(190,196,214,0)');
     ctx.save();
@@ -248,7 +228,7 @@ export function initFallbackHero(host, oldCanvas) {
     ctx.scale(1, 0.5);
     ctx.fillStyle = pool;
     ctx.beginPath();
-    ctx.arc(0, 0, scale * 4.6, 0, Math.PI * 2);
+    ctx.arc(0, 0, scale * 4.8, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
     ctx.strokeStyle = 'rgba(165,170,186,0.22)';
@@ -260,12 +240,24 @@ export function initFallbackHero(host, oldCanvas) {
       ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.stroke();
     }
 
-    // floor ring pulse
-    const rr = 0.7 + ringT * 4.6;
-    ellipseFloor(0, 0.01, 0, rr, `rgba(${ACC},0.9)`, 0.6 * (1 - ringT));
+    // stamp imprint on the floor
+    if (flareCache > 0.02) {
+      ellipseFloor(0, 0.01, 0, 0.9, `rgba(255,99,105,${flareCache * 0.9})`, 1);
+      ellipseFloor(0, 0.01, 0, 0.55, `rgba(255,99,105,${flareCache * 0.6})`, 1);
+      const [ix, iy] = P(0, 0.01, 0);
+      ctx.beginPath();
+      ctx.ellipse(ix, iy, scale * 0.16, scale * 0.11, 0, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,130,135,${flareCache * 0.9})`;
+      ctx.fill();
+    }
 
-    // reflection first (under everything above the floor)
-    drawMonolith(1, true);
+    // ring pulse
+    ringT = (ringT + 0.0065) % 1;
+    const rr = 0.7 + ringT * 4.8;
+    ellipseFloor(0, 0.01, 0, rr, 'rgba(229,72,77,0.9)', 0.55 * (1 - ringT) + flareCache * 0.35);
+
+    // reflection under the floor line
+    drawDisc(sx, sy, 1, true);
 
     // dust
     for (const d of dust) {
@@ -276,42 +268,52 @@ export function initFallbackHero(host, oldCanvas) {
       ctx.fill();
     }
 
-    // ---------- spine ----------
-    const bobBlock = (p) => p.y + Math.sin(t * 1.5 + p.phase) * 0.05;
-    for (let i = 0; i < spinePts.length; i++) {
-      const p = spinePts[i];
-      if (i > 0) {
-        const q = spinePts[i - 1];
-        const a = P(p.x, bobBlock(p), p.z), b = P(q.x, bobBlock(q), q.z);
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-        ctx.strokeStyle = 'rgba(255,99,105,0.65)';
-        ctx.lineWidth = 1.6;
-        ctx.shadowColor = 'rgba(255,99,105,0.6)';
-        ctx.shadowBlur = 7;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      }
-    }
-    const sorted = [...spinePts].sort((a, b) => (a.x + a.z) - (b.x + b.z));
-    for (const p of sorted) {
-      cubeFaces(p.x, bobBlock(p), p.z, 0.15, {
-        top: '#5e6570', right: '#282d35', front: '#1c2027',
-        stroke: 'rgba(255,110,116,1)', glow: 15, lw: 1.8, sheen: false,
-      });
+    // drips
+    for (let i = 0; i < drips.length; i++) {
+      const dp = drips[i];
+      const bx = sx + Math.cos(dp.a) * R * 0.82;
+      const by = sy + Math.sin(dp.a) * R * 0.82 * TILT + R * 0.1;
+      const len = dp.len * R * (1 + Math.sin(t * 1.1 + i * 2) * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(bx - dp.w * R, by);
+      ctx.quadraticCurveTo(bx - dp.w * R * 0.6, by + len * 0.6, bx, by + len);
+      ctx.quadraticCurveTo(bx + dp.w * R * 0.6, by + len * 0.6, bx + dp.w * R, by);
+      ctx.closePath();
+      ctx.fillStyle = '#471014';
+      ctx.fill();
     }
 
-    // ---------- monolith ----------
-    drawMonolith(1, false);
+    // ---------- the seal ----------
+    drawDisc(sx, sy, 1, false);
 
-    // ---------- particles ----------
+    // ---------- orbit motes ----------
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const p of particles) {
-      if (!REDUCED) p.t = (p.t + p.sp * 0.016) % 1;
-      const [sx, sy] = sampleFlow(p.t);
-      ctx.fillStyle = p.t > 0.72 ? 'rgba(255,130,135,0.95)' : 'rgba(255,205,205,0.7)';
+    for (const o of orbit) {
+      if (!REDUCED) o.sink = (o.sink + 0.0021) % 1;
+      const a = t * 0.55 + o.ph;
+      const rF = (1.22 - o.sink * 0.75);
+      const mx = sx + Math.cos(a) * R * rF;
+      const my = sy + Math.sin(a) * R * rF * TILT - o.sink * R * 0.25;
+      ctx.fillStyle = `rgba(255,170,173,${0.75 * (1 - o.sink * 0.6)})`;
       ctx.beginPath();
-      ctx.arc(sx, sy, 1.8, 0, Math.PI * 2);
+      ctx.arc(mx, my, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ---------- evidence stream ----------
+    const f0 = [sx + R * 1.55, sy + R * 0.9];
+    const f1 = [sx + R * 0.9, sy + R * 0.15];
+    const f2 = [sx + R * 0.3, sy - R * 0.05];
+    const f3 = [sx, sy];
+    for (const p of flow) {
+      if (!REDUCED) p.t = (p.t + p.sp * 0.016) % 1;
+      const u = p.t, v = 1 - u;
+      const mx = v * v * v * f0[0] + 3 * v * v * u * f1[0] + 3 * v * u * u * f2[0] + u * u * u * f3[0];
+      const my = v * v * v * f0[1] + 3 * v * v * u * f1[1] + 3 * v * u * u * f2[1] + u * u * u * f3[1];
+      ctx.fillStyle = u > 0.72 ? 'rgba(255,130,135,0.95)' : 'rgba(255,205,205,0.7)';
+      ctx.beginPath();
+      ctx.arc(mx, my, 1.9, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -322,15 +324,13 @@ export function initFallbackHero(host, oldCanvas) {
 
   function frame() {
     t += 0.016;
-    ringT = (ringT + 0.0065) % 1;
-    sweepT = (sweepT + 0.0023) % 1;
     px += (tpx - px) * 0.06;
     py += (tpy - py) * 0.06;
     draw();
   }
 
   if (REDUCED) {
-    t = 1.2; ringT = 0.3; sweepT = 0.5;
+    t = 1.2;
     draw();
   } else {
     const loop = () => {
