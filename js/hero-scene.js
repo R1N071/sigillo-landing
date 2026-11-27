@@ -115,6 +115,12 @@ export function initHeroScene(canvas, opts = {}) {
     else if (u < 0.95) { colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.62; colors[i * 3 + 2] = 0.64; }
     else { colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.93; colors[i * 3 + 2] = 0.93; }
   }
+  // engagement state: ejecta velocity, certified heat, hot flags, base colors
+  const vel = new Float32Array(N * 3);
+  const heat = new Float32Array(N);
+  const hotFlag = new Uint8Array(N);
+  const ejecta = new Uint8Array(N);
+  const baseColors = new Float32Array(colors);
   const pGeo = new THREE.BufferGeometry();
   pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -138,6 +144,7 @@ export function initHeroScene(canvas, opts = {}) {
   const certDots = [];
   const tethers = [];
   const artifacts = [];
+  const artState = [];
 
   function tether(from) {
     const line = new THREE.Line(
@@ -250,6 +257,10 @@ export function initHeroScene(canvas, opts = {}) {
     tether(g.position);
     artifacts.push(g);
   }
+
+  for (const g of artifacts) artState.push({ act: 0, hits: 0, kickT: 0, baseY: g.position.y });
+  const tmpV = new THREE.Vector3();
+  const artLocal = artifacts.map(() => new THREE.Vector3());
 
   // ---------- the stamp flare meshes ----------
   const shock = new THREE.Mesh(
@@ -374,17 +385,24 @@ export function initHeroScene(canvas, opts = {}) {
     // lock ring: draws itself in during the hold
     const lockA = ph.id === 2 ? Math.min(1, ph.t * 2.4) : ph.id === 3 ? Math.max(0, 1 - ph.t * 4) : 0;
 
-    // the tech constellation: slow orrery, artifacts alive, certified at the stamp
+    // the tech constellation: stations sweep the field, harvest, and kick
     constellation.rotation.y = t * 0.09;
-    for (let i = 0; i < artifacts.length; i++) {
-      const g = artifacts[i];
-      g.position.y += Math.sin(t * 1.1 + i * 2.1) * 0.0012;
-      g.rotation.x += g.userData.spin.x * dt * 0.35;
-      g.rotation.y += g.userData.spin.y * dt * 0.35;
-      g.rotation.z += g.userData.spin.z * dt * 0.35;
+    for (let k = 0; k < artifacts.length; k++) {
+      const g = artifacts[k];
+      const st = artState[k];
+      st.kickT *= Math.exp(-dt * 3.2);
+      st.act += (st.hits * 14 - st.act) * Math.min(1, dt * 4);
+      st.hits = 0;
+      const bump = 1 + st.kickT * 0.32;
+      g.scale.setScalar(bump);
+      g.position.y = st.baseY + Math.sin(t * 1.1 + k * 2.1) * 0.08;
+      const spinBoost = 0.35 * (1 + st.act * 3 + st.kickT * 2);
+      g.rotation.x += g.userData.spin.x * dt * spinBoost;
+      g.rotation.y += g.userData.spin.y * dt * spinBoost;
+      g.rotation.z += g.userData.spin.z * dt * spinBoost;
+      certDots[k].opacity = Math.min(1, 0.35 + st.act * 0.7 + st.kickT * 0.5 + lockA * 0.45);
+      tethers[k].opacity = Math.min(1, 0.1 + st.act * 0.5 + lockA * 0.5);
     }
-    for (const m of certDots) m.opacity = 0.55 + lockA * 0.45;
-    for (const m of tethers) m.opacity = 0.14 + lockA * 0.6;
     lockRing.material.opacity = lockA;
     lockRing.rotation.z += dt * 0.15;
     pMat.opacity = ph.id === 2 ? 1.0 : 0.92;
@@ -393,12 +411,57 @@ export function initHeroScene(canvas, opts = {}) {
       for (let i = 0; i < N; i++) {
         const i3 = i * 3;
         const sd = seeds[i];
-        if (ph.id === 0) {
-          // living flow field
+        if (ph.id === 0 && ejecta[i]) {
+          // certified mote flying from a station toward the seal
+          pos[i3] += vel[i3] * dt;
+          pos[i3 + 1] += vel[i3 + 1] * dt;
+          pos[i3 + 2] += vel[i3 + 2] * dt;
+          const damp = Math.exp(-dt * 1.15);
+          vel[i3] *= damp; vel[i3 + 1] *= damp; vel[i3 + 2] *= damp;
+          if (vel[i3] * vel[i3] + vel[i3 + 1] * vel[i3 + 1] + vel[i3 + 2] * vel[i3 + 2] < 0.09) {
+            ejecta[i] = 0;
+          }
+        } else if (ph.id === 0) {
+          // living flow field, harvested by the passing stations
           const x = pos[i3], y = pos[i3 + 1], z = pos[i3 + 2];
-          const vx = Math.sin(y * 1.35 + t * 0.45 + sd) * 0.34 + Math.sin(z * 0.8 + t * 0.2) * 0.12;
-          const vy = Math.sin(z * 1.1 + t * 0.35 + sd * 1.7) * 0.3 - 0.03;
-          const vz = Math.sin(x * 0.9 + t * 0.3 + sd * 0.6) * 0.16;
+          let vx = Math.sin(y * 1.35 + t * 0.45 + sd) * 0.34 + Math.sin(z * 0.8 + t * 0.2) * 0.12;
+          let vy = Math.sin(z * 1.1 + t * 0.35 + sd * 1.7) * 0.3 - 0.03;
+          let vz = Math.sin(x * 0.9 + t * 0.3 + sd * 0.6) * 0.16;
+          // nearest station
+          let ak = -1, ad2 = 1e9, adx = 0, ady = 0, adz = 0;
+          for (let k = 0; k < artLocal.length; k++) {
+            const dx = x - artLocal[k].x, dy = y - artLocal[k].y, dz = z - artLocal[k].z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < ad2) { ad2 = d2; ak = k; adx = dx; ady = dy; adz = dz; }
+          }
+          const ATTRACT = 1.05;
+          if (ad2 < ATTRACT * ATTRACT) {
+            const ad = Math.sqrt(ad2);
+            const ux = adx / ad, uy = ady / ad, uz = adz / ad;
+            if (ad < 0.18) {
+              // arrival: the station certifies the mote and fires it at the seal
+              heat[i] = 1;
+              hotFlag[i] = 1;
+              ejecta[i] = 1;
+              const sp = 1.9 + Math.random() * 1.4;
+              const al = Math.max(0.3, Math.hypot(artLocal[ak].x, artLocal[ak].y, artLocal[ak].z));
+              vel[i3] = -artLocal[ak].x / al * sp;
+              vel[i3 + 1] = -artLocal[ak].y / al * sp;
+              vel[i3 + 2] = -artLocal[ak].z / al * sp;
+              artState[ak].hits++;
+              artState[ak].kickT = 1;
+            } else {
+              // spiral capture: pull inward plus a tangential swirl
+              const pull = (ATTRACT - ad) * 1.9 * dt;
+              const tx = uy, ty = -uz * 0.4 - ux * 0.2, tz = uy * 0.4 - uy * 0;
+              vx -= ux * pull * 5;
+              vy -= uy * pull * 5;
+              vz -= uz * pull * 5;
+              vx += tx * pull * 3;
+              vy += ty * pull * 3;
+              vz += (ux * 0.5) * pull * 3;
+            }
+          }
           pos[i3] += vx * dt;
           pos[i3 + 1] += vy * dt;
           pos[i3 + 2] += vz * dt;
@@ -438,6 +501,32 @@ export function initHeroScene(canvas, opts = {}) {
           pos[i3 + 2] += burstVel[i3 + 2] * dt * 2.1;
         }
       }
+      // stations in stage-local space for the capture math
+      for (let k = 0; k < artifacts.length; k++) {
+        artifacts[k].getWorldPosition(tmpV);
+        stage.worldToLocal(tmpV);
+        artLocal[k].copy(tmpV);
+      }
+      // certified heat: white-hot fade back to crimson
+      const cAttr = pGeo.attributes.color;
+      for (let i = 0; i < N; i++) {
+        if (!hotFlag[i]) continue;
+        heat[i] *= Math.exp(-dt * 0.32);
+        const h = heat[i];
+        const i3 = i * 3;
+        if (h < 0.02) {
+          hotFlag[i] = 0;
+          cAttr.array[i3] = baseColors[i3];
+          cAttr.array[i3 + 1] = baseColors[i3 + 1];
+          cAttr.array[i3 + 2] = baseColors[i3 + 2];
+        } else {
+          const b = 1 + h * 2.2;
+          cAttr.array[i3] = Math.min(1, baseColors[i3] * b + h * 0.5);
+          cAttr.array[i3 + 1] = Math.min(1, baseColors[i3 + 1] * b + h * 0.45);
+          cAttr.array[i3 + 2] = Math.min(1, baseColors[i3 + 2] * b + h * 0.45);
+        }
+      }
+      cAttr.needsUpdate = true;
       pGeo.attributes.position.needsUpdate = true;
     }
 
