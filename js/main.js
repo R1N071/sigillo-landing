@@ -1,11 +1,10 @@
 // Sigillo landing: entrance motion, scroll reveals, counters,
 // the countdown to 20 January 2027, and module init.
 import { animate, inView, scroll } from 'motion';
-import { initHeroScene } from './hero-scene.js';
+import { initLedger } from './ledger.js';
 import { initExplodeScene } from './explode.js';
 import { initPetri } from './petri.js';
 import { initTamper } from './tamper.js';
-import { initFallbackHero } from './fallback-hero.js';
 import { initFallbackExplode } from './fallback-explode.js';
 
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -135,41 +134,16 @@ function magnetic() {
   });
 }
 
-// ---------- 3D boot with guaranteed 2D fallback ----------
+// ---------- scene boot: ledger hero (2D, universal) + WebGL pipeline with fallback ----------
 let using2D = false;
-let heroHandle = null;
 let explodeHandle = null;
-
-function heroCanvasProbe() {
-  const c = document.getElementById('hero-canvas');
-  if (!c) return 0;
-  try {
-    const probe = document.createElement('canvas');
-    probe.width = 72;
-    probe.height = 45;
-    const g = probe.getContext('2d');
-    g.drawImage(c, 0, 0, 72, 45);
-    const d = g.getImageData(0, 0, 72, 45).data;
-    let bright = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i] + d[i + 1] + d[i + 2] > 60) bright++;
-    }
-    return bright;
-  } catch {
-    return 0;
-  }
-}
 
 function switchTo2D(reason) {
   if (using2D) return;
   using2D = true;
   console.warn('[sigillo] 2D renderer active:', reason);
   document.documentElement.setAttribute('data-renderer', '2d');
-  try { if (heroHandle) heroHandle.dispose(); } catch {}
   try { if (explodeHandle) explodeHandle.dispose(); } catch {}
-  try {
-    initFallbackHero(document.querySelector('.hero'), document.getElementById('hero-canvas'));
-  } catch (e) { console.error('[sigillo] fallback hero', e); }
   try {
     initFallbackExplode(
       document.querySelector('.pipeline'),
@@ -179,47 +153,28 @@ function switchTo2D(reason) {
   } catch (e) { console.error('[sigillo] fallback explode', e); }
 }
 
-function boot3D() {
-  if (new URLSearchParams(location.search).get('renderer') === '2d') {
-    switchTo2D('forced by URL');
+function bootScenes() {
+  // the hero ledger is pure 2D: identical in every browser
+  safe('ledger', () => initLedger(document.getElementById('hero-canvas')));
+
+  const force2D = new URLSearchParams(location.search).get('renderer') === '2d';
+  if (force2D || !webglAvailable()) {
+    if (!force2D) console.warn('[sigillo] webgl unavailable');
+    switchTo2D(force2D ? 'forced by URL' : 'webgl unavailable');
     return;
   }
-  let ok = false;
-  if (webglAvailable()) {
-    try {
-      heroHandle = initHeroScene(document.getElementById('hero-canvas'), {
-        onFatal: () => switchTo2D('webgl context lost'),
-      });
-      explodeHandle = initExplodeScene(
-        document.querySelector('.pipeline'),
-        document.getElementById('explode-canvas'),
-        document.getElementById('leader-lines'),
-        document.getElementById('layer-chips')
-      );
-      ok = true;
-    } catch (e) {
-      console.error('[sigillo] webgl init failed', e);
-    }
+  try {
+    explodeHandle = initExplodeScene(
+      document.querySelector('.pipeline'),
+      document.getElementById('explode-canvas'),
+      document.getElementById('leader-lines'),
+      document.getElementById('layer-chips')
+    );
+    document.documentElement.setAttribute('data-renderer', 'webgl');
+  } catch (e) {
+    console.error('[sigillo] webgl init failed', e);
+    switchTo2D('webgl init failed');
   }
-  if (!ok) {
-    switchTo2D(webglAvailable() ? 'webgl init failed' : 'webgl unavailable');
-    return;
-  }
-  document.documentElement.setAttribute('data-renderer', 'webgl');
-  // watchdog: if the canvas draws nothing (silent GPU failure), switch to 2D
-  const check = (attempt) => {
-    setTimeout(() => {
-      if (using2D) return;
-      if (document.visibilityState !== 'visible') {
-        if (attempt < 6) check(attempt + 1);
-        return;
-      }
-      const frames = heroHandle ? heroHandle.getFrames() : 0;
-      if (frames < 3) { switchTo2D('render loop idle'); return; }
-      if (heroCanvasProbe() < 12) { switchTo2D('blank canvas'); }
-    }, attempt === 0 ? 2200 : 1600);
-  };
-  check(0);
 }
 
 // ---------- boot ----------
@@ -245,7 +200,7 @@ function boot() {
   safe('countdown', () => countdown());
   safe('magnetic', () => magnetic());
 
-  safe('3d', () => boot3D());
+  safe('scenes', () => bootScenes());
 
   safe('petri', () => initPetri(document.getElementById('petri-canvas'), document.getElementById('deviation-feed')));
   safe('tamper', () => initTamper());
