@@ -1,6 +1,7 @@
-// Hero scene: the seal formed from evidence. Thousands of glowing motes
-// drift in a living flow field; periodically they converge into the sigil
-// itself, hold as a sealed stamp with a shockwave, then burst apart again.
+// Hero scene: the evidence river. A directed stream of motes flows from the
+// bottom-right corner through the pipeline stations in order - ingest grate,
+// hash-chain blocks, TPM signing chip - and pours into the seal, which
+// periodically stamps the whole swarm into the sigil. A live schematic.
 import * as THREE from 'three';
 
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,33 +32,16 @@ function makeGlowTexture(rgb = '255,99,105,') {
   return new THREE.CanvasTexture(c);
 }
 
-// sample the sigil: two rings, a heart disc, an outer wax rim and a scatter
 function sigilTargets(n) {
   const pts = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const u = Math.random();
     let x, y;
-    if (u < 0.36) { // ring A
-      const a = Math.random() * Math.PI * 2;
-      const r = 1.32 + (Math.random() - 0.5) * 0.09;
-      x = Math.cos(a) * r; y = Math.sin(a) * r;
-    } else if (u < 0.58) { // ring B
-      const a = Math.random() * Math.PI * 2;
-      const r = 0.80 + (Math.random() - 0.5) * 0.08;
-      x = Math.cos(a) * r; y = Math.sin(a) * r;
-    } else if (u < 0.74) { // heart disc
-      const a = Math.random() * Math.PI * 2;
-      const r = 0.26 * Math.sqrt(Math.random());
-      x = Math.cos(a) * r; y = Math.sin(a) * r;
-    } else if (u < 0.85) { // wax rim halo
-      const a = Math.random() * Math.PI * 2;
-      const r = 1.62 + (Math.random() - 0.5) * 0.18;
-      x = Math.cos(a) * r; y = Math.sin(a) * r;
-    } else { // sparse scatter inside
-      const a = Math.random() * Math.PI * 2;
-      const r = 1.5 * Math.sqrt(Math.random());
-      x = Math.cos(a) * r; y = Math.sin(a) * r;
-    }
+    if (u < 0.36) { const a = Math.random() * Math.PI * 2; const r = 1.32 + (Math.random() - 0.5) * 0.09; x = Math.cos(a) * r; y = Math.sin(a) * r; }
+    else if (u < 0.58) { const a = Math.random() * Math.PI * 2; const r = 0.80 + (Math.random() - 0.5) * 0.08; x = Math.cos(a) * r; y = Math.sin(a) * r; }
+    else if (u < 0.74) { const a = Math.random() * Math.PI * 2; const r = 0.26 * Math.sqrt(Math.random()); x = Math.cos(a) * r; y = Math.sin(a) * r; }
+    else if (u < 0.85) { const a = Math.random() * Math.PI * 2; const r = 1.62 + (Math.random() - 0.5) * 0.18; x = Math.cos(a) * r; y = Math.sin(a) * r; }
+    else { const a = Math.random() * Math.PI * 2; const r = 1.5 * Math.sqrt(Math.random()); x = Math.cos(a) * r; y = Math.sin(a) * r; }
     pts[i * 3] = x;
     pts[i * 3 + 1] = y;
     pts[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
@@ -87,12 +71,47 @@ export function initHeroScene(canvas, opts = {}) {
   key.position.set(5, 8, 5);
   scene.add(key);
 
-  // ---------- the swarm ----------
   const stage = new THREE.Group();
   stage.position.y = 1.95;
   scene.add(stage);
 
+  // ---------- the pipeline path (stage-local) ----------
+  const STATIONS = {
+    ingest: new THREE.Vector3(1.9, -1.18, 0.36),
+    chain: [
+      new THREE.Vector3(1.42, -0.76, 0.28),
+      new THREE.Vector3(1.26, -0.5, 0.22),
+      new THREE.Vector3(1.1, -0.24, 0.16),
+    ],
+    sign: new THREE.Vector3(1.0, 0.12, 0.1),
+  };
+  const pathCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(2.75, -2.05, 0.5),
+    STATIONS.ingest,
+    STATIONS.chain[0],
+    STATIONS.chain[1],
+    STATIONS.chain[2],
+    STATIONS.sign,
+    new THREE.Vector3(0.6, 0.42, 0.05),
+    new THREE.Vector3(0.28, 0.28, 0.0),
+  ]);
+
+  function closestU(target) {
+    let best = 0, bd = 1e9;
+    for (let i = 0; i <= 220; i++) {
+      const u = i / 220;
+      const d = pathCurve.getPointAt(u).distanceToSquared(target);
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  }
+  const uIngest = closestU(STATIONS.ingest);
+  const uChain = STATIONS.chain.map(closestU);
+  const uSign = closestU(STATIONS.sign);
+
+  // ---------- the swarm ----------
   const N = 6500;
+  const NR = Math.floor(N * 0.52); // the river share
   const pos = new Float32Array(N * 3);
   const targets = sigilTargets(N);
   const startPos = new Float32Array(N * 3);
@@ -100,169 +119,140 @@ export function initHeroScene(canvas, opts = {}) {
   const seeds = new Float32Array(N);
   const delays = new Float32Array(N);
   const colors = new Float32Array(N * 3);
+  const baseColors = new Float32Array(N * 3);
+  const isRiver = new Uint8Array(N);
+  const uParam = new Float32Array(N);
+  const laneSeed = new Float32Array(N);
+  const riverSpeed = new Float32Array(N);
+  const returning = new Float32Array(N);
+  const heat = new Float32Array(N);
+  const hotFlag = new Uint8Array(N);
+
+  const tmpV = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
     seeds[i] = Math.random() * 100;
     delays[i] = Math.random() * 0.55;
-    // birth: scattered in the flow ellipsoid
-    const a = Math.random() * Math.PI * 2;
-    const r = 1.4 + Math.random() * 1.5;
-    pos[i * 3] = Math.cos(a) * r * 1.35;
-    pos[i * 3 + 1] = Math.sin(a) * r * 0.95;
-    pos[i * 3 + 2] = (Math.random() - 0.5) * 2.2;
-    // color: crimson swarm, some bright sparks, few white-hot
     const u = Math.random();
     if (u < 0.8) { colors[i * 3] = 0.92; colors[i * 3 + 1] = 0.30; colors[i * 3 + 2] = 0.32; }
     else if (u < 0.95) { colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.62; colors[i * 3 + 2] = 0.64; }
     else { colors[i * 3] = 1.0; colors[i * 3 + 1] = 0.93; colors[i * 3 + 2] = 0.93; }
+    if (i < NR) {
+      // river motes run brighter than the ambient drift
+      colors[i * 3] = Math.min(1, colors[i * 3] * 1.25 + 0.08);
+      colors[i * 3 + 1] = Math.min(1, colors[i * 3 + 1] * 1.25 + 0.02);
+      colors[i * 3 + 2] = Math.min(1, colors[i * 3 + 2] * 1.25 + 0.02);
+      isRiver[i] = 1;
+      uParam[i] = Math.random();
+      laneSeed[i] = Math.random() * Math.PI * 2;
+      riverSpeed[i] = 0.05 + Math.random() * 0.055;
+      pathCurve.getPointAt(uParam[i], tmpV);
+      pos[i * 3] = tmpV.x;
+      pos[i * 3 + 1] = tmpV.y;
+      pos[i * 3 + 2] = tmpV.z;
+    } else {
+      const a = Math.random() * Math.PI * 2;
+      const r = 1.4 + Math.random() * 1.5;
+      pos[i * 3] = Math.cos(a) * r * 1.35;
+      pos[i * 3 + 1] = Math.sin(a) * r * 0.95;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 2.2;
+    }
   }
-  // engagement state: ejecta velocity, certified heat, hot flags, base colors
-  const vel = new Float32Array(N * 3);
-  const heat = new Float32Array(N);
-  const hotFlag = new Uint8Array(N);
-  const ejecta = new Uint8Array(N);
-  const baseColors = new Float32Array(colors);
+  baseColors.set(colors);
+
+  // the pipeline guide wire the river runs along
+  {
+    const wirePts = pathCurve.getPoints(60);
+    const wire = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(wirePts),
+      new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.14 })
+    );
+    stage.add(wire);
+  }
+
   const pGeo = new THREE.BufferGeometry();
   pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   const pMat = new THREE.PointsMaterial({
-    size: 0.085, vertexColors: true, transparent: true, opacity: 1.0,
+    size: 0.085, vertexColors: true, transparent: true, opacity: 0.95,
     blending: THREE.AdditiveBlending, depthWrite: false,
     map: makeGlowTexture(), sizeAttenuation: true,
   });
-  const swarm = new THREE.Points(pGeo, pMat);
-  stage.add(swarm);
+  stage.add(new THREE.Points(pGeo, pMat));
 
-  // ---------- the tech constellation: four artifacts orbiting the seal ----------
-  const constellation = new THREE.Group();
-  stage.add(constellation);
-
+  // ---------- station meshes ----------
   const artDark = new THREE.MeshStandardMaterial({ color: 0x1b1b21, metalness: 0.55, roughness: 0.4 });
   const artEdge = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.95 });
   const brass = new THREE.MeshStandardMaterial({ color: 0x9a7b3f, metalness: 0.9, roughness: 0.3 });
-  const glowDotMat = () => new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
 
-  const certDots = [];
-  const tethers = [];
-  const artifacts = [];
-  const artState = [];
-
-  function tether(from) {
-    const line = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([from.clone(), new THREE.Vector3(0, 0, 0)]),
-      new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.18 })
+  // ingest: a grate portal the river threads through
+  const ingestGroup = new THREE.Group();
+  {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.34, 0.022, 10, 48),
+      new THREE.MeshStandardMaterial({ color: 0x2a2c33, metalness: 0.7, roughness: 0.3, emissive: ACCENT, emissiveIntensity: 0.35 })
     );
-    constellation.add(line);
-    tethers.push(line.material);
-    return line;
-  }
-
-  // 1) the hash chain: three linked blocks
-  {
-    const g = new THREE.Group();
-    const bGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
-    const pts = [[-0.2, -0.12, 0], [0, 0.06, 0.1], [0.2, 0.24, 0.02]];
+    ingestGroup.add(ring);
     for (let i = 0; i < 3; i++) {
-      const b = new THREE.Mesh(bGeo, artDark);
-      b.position.set(...pts[i]);
-      b.add(new THREE.LineSegments(new THREE.EdgesGeometry(bGeo), artEdge));
-      g.add(b);
-      if (i > 0) {
-        const line = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...pts[i - 1]), new THREE.Vector3(...pts[i])]),
-          new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.6 })
-        );
-        g.add(line);
-      }
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.014, 0.014), artEdge);
+      bar.rotation.z = -0.62 + i * 0.62;
+      ingestGroup.add(bar);
     }
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), glowDotMat());
-    dot.position.set(0.2, 0.24, 0.02);
-    g.add(dot);
-    certDots.push(dot.material);
-    g.position.set(2.35, 0.55, 0);
-    g.userData.spin = { x: 0.3, y: 0.5, z: 0.1 };
-    constellation.add(g);
-    tether(g.position);
-    artifacts.push(g);
+    ingestGroup.position.copy(STATIONS.ingest);
+    ingestGroup.rotation.z = 0.62;
+    stage.add(ingestGroup);
   }
 
-  // 2) the TPM signing chip
+  // the hash chain: three blocks strung on the river
+  const chainGroups = [];
   {
-    const g = new THREE.Group();
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.36), artDark);
-    g.add(slab);
-    g.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), artEdge));
+    const bGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    for (const cp of STATIONS.chain) {
+      const g = new THREE.Group();
+      const b = new THREE.Mesh(bGeo, artDark);
+      g.add(b);
+      g.add(new THREE.LineSegments(new THREE.EdgesGeometry(bGeo), artEdge));
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      g.add(dot);
+      g.position.copy(cp);
+      g.userData.dot = dot.material;
+      stage.add(g);
+      chainGroups.push(g);
+    }
+  }
+
+  // the TPM signing chip
+  const chipGroup = new THREE.Group();
+  const chipDotMat = new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.15, 0.34), artDark);
+    chipGroup.add(slab);
+    chipGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), artEdge));
     for (let i = 0; i < 4; i++) {
       const pad = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.08), brass);
-      pad.position.set(-0.19 + i * 0.13, 0.09, 0.13);
-      g.add(pad);
+      pad.position.set(-0.17 + i * 0.115, 0.095, 0.12);
+      chipGroup.add(pad);
       const pad2 = pad.clone();
-      pad2.position.z = -0.13;
-      g.add(pad2);
+      pad2.position.z = -0.12;
+      chipGroup.add(pad2);
     }
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowDotMat());
-    dot.position.y = 0.1;
-    g.add(dot);
-    certDots.push(dot.material);
-    g.position.set(0, -0.35, 2.45);
-    g.userData.spin = { x: 0.15, y: 0.6, z: 0 };
-    constellation.add(g);
-    tether(g.position);
-    artifacts.push(g);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), chipDotMat);
+    dot.position.y = 0.11;
+    chipGroup.add(dot);
+    chipGroup.position.copy(STATIONS.sign);
+    stage.add(chipGroup);
   }
 
-  // 3) the WORM vault
-  {
-    const g = new THREE.Group();
-    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.2, 24), artDark);
-    g.add(drum);
-    const ringTop = new THREE.Mesh(
-      new THREE.TorusGeometry(0.27, 0.012, 8, 40),
-      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.8 })
-    );
-    ringTop.rotation.x = Math.PI / 2;
-    ringTop.position.y = 0.11;
-    g.add(ringTop);
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), glowDotMat());
-    dot.position.y = 0.16;
-    g.add(dot);
-    certDots.push(dot.material);
-    g.position.set(-2.4, 0.25, 0.4);
-    g.userData.spin = { x: 0.1, y: 0.7, z: 0.2 };
-    constellation.add(g);
-    tether(g.position);
-    artifacts.push(g);
-  }
+  // the timestamp ring around the seal, always faintly present
+  const lockRing = new THREE.Mesh(
+    new THREE.TorusGeometry(1.85, 0.012, 8, 96),
+    new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  stage.add(lockRing);
 
-  // 4) the timestamp ring
-  {
-    const g = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.24, 0.014, 10, 48),
-      new THREE.MeshStandardMaterial({ color: 0x2a2c33, metalness: 0.7, roughness: 0.3, emissive: ACCENT, emissiveIntensity: 0.4 })
-    );
-    g.add(ring);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const tick = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.07, 0.016), new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.9 }));
-      tick.position.set(Math.cos(a) * 0.31, Math.sin(a) * 0.31, 0);
-      tick.rotation.z = a + Math.PI / 2;
-      g.add(tick);
-    }
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowDotMat());
-    g.add(dot);
-    certDots.push(dot.material);
-    g.position.set(-0.3, -0.6, -2.3);
-    g.userData.spin = { x: 0.5, y: 0.3, z: 0.4 };
-    constellation.add(g);
-    tether(g.position);
-    artifacts.push(g);
-  }
-
-  for (const g of artifacts) artState.push({ act: 0, hits: 0, kickT: 0, baseY: g.position.y });
-  const tmpV = new THREE.Vector3();
-  const artLocal = artifacts.map(() => new THREE.Vector3());
-
-  // ---------- the stamp flare meshes ----------
+  // stamp meshes
   const shock = new THREE.Mesh(
     new THREE.RingGeometry(1.62, 1.72, 72),
     new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
@@ -274,14 +264,15 @@ export function initHeroScene(canvas, opts = {}) {
   }));
   flash.scale.set(5.2, 5.2, 1);
   stage.add(flash);
-  // the rim that locks around the formed seal
-  const lockRing = new THREE.Mesh(
-    new THREE.TorusGeometry(1.85, 0.012, 8, 96),
-    new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })
-  );
-  stage.add(lockRing);
+  // the seal heart: fed by every absorbed mote
+  const heart = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture('255,99,105,'), transparent: true, opacity: 0.15,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  heart.scale.set(1.6, 1.6, 1);
+  stage.add(heart);
 
-  // ambient dust far behind
+  // ambient dust
   const dustN = 40;
   const dustPos = new Float32Array(dustN * 3);
   for (let i = 0; i < dustN; i++) {
@@ -295,7 +286,6 @@ export function initHeroScene(canvas, opts = {}) {
     color: 0x8a8f9c, size: 0.028, transparent: true, opacity: 0.3, depthWrite: false,
   })));
 
-  // backdrop glow
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeGlowTexture(), transparent: true, opacity: 0.3,
     blending: THREE.AdditiveBlending, depthWrite: false,
@@ -303,6 +293,26 @@ export function initHeroScene(canvas, opts = {}) {
   glow.scale.set(9, 6.5, 1);
   glow.position.set(0, 2.0, -6);
   scene.add(glow);
+
+  // ---------- schematic labels ----------
+  const host = canvas.parentElement || document.body;
+  const labelHost = document.createElement('div');
+  labelHost.className = 'station-tags';
+  host.appendChild(labelHost);
+  const tagDefs = [
+    { txt: 'INGEST', at: () => STATIONS.ingest.clone().add(new THREE.Vector3(0.0, -0.5, 0)) },
+    { txt: 'HASH CHAIN', at: () => STATIONS.chain[1].clone().add(new THREE.Vector3(0.0, -0.42, 0)) },
+    { txt: 'TPM 2.0 SIGN', at: () => STATIONS.sign.clone().add(new THREE.Vector3(0.0, -0.42, 0)) },
+    { txt: 'SEALED EVIDENCE', at: () => new THREE.Vector3(0, -1.62, 0) },
+  ];
+  const tags = tagDefs.map((d) => {
+    const el = document.createElement('div');
+    el.className = 'station-tag';
+    el.textContent = d.txt;
+    labelHost.appendChild(el);
+    return { el, at: d.at };
+  });
+  const projV = new THREE.Vector3();
 
   // ---------- pointer ----------
   let mx = 0, my = 0, tmx = 0, tmy = 0;
@@ -319,9 +329,8 @@ export function initHeroScene(canvas, opts = {}) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const wide = w / h > 1.05;
-    stage.position.set(wide ? 1.15 : 0, wide ? 1.95 : 1.45, 0);
-    stage.scale.setScalar(wide ? 1.0 : 0.88);
-    constellation.scale.setScalar(wide ? 1 : 0.52);
+    stage.position.set(wide ? 1.05 : 0, wide ? 1.95 : 1.42, 0);
+    stage.scale.setScalar(wide ? 1.0 : 0.86);
     camera.updateProjectionMatrix();
   }
   place();
@@ -333,20 +342,36 @@ export function initHeroScene(canvas, opts = {}) {
     .observe(canvas);
   const clock = new THREE.Clock();
   let lastPhase = -1;
-
   const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+  const smoothstep = (x) => x * x * (3 - 2 * x);
+
+  // station activity
+  const chipState = { act: 0, hits: 0, kickT: 0 };
+  const cubeAct = [0, 0, 0];
+  let heartAct = 0;
+
+  function riverPos(i, out) {
+    const uu = uParam[i];
+    pathCurve.getPointAt(uu, out);
+    let width = 0.36 * (1 - uu * 0.5);
+    if (Math.abs(uu - uIngest) < 0.09) width *= 0.42;
+    if (uu > uChain[0] - 0.05 && uu < uChain[2] + 0.05) width *= 0.34;
+    if (Math.abs(uu - uSign) < 0.05) width *= 0.5;
+    const k = laneSeed[i];
+    const wob = Math.sin(uu * 26 + k * 5) * 0.6 + Math.sin(seeds[i] + uu * 9) * 0.4;
+    out.x += Math.cos(k) * wob * width;
+    out.y += Math.sin(k) * wob * width * 0.55;
+    out.z += Math.sin(k * 1.7) * wob * width * 0.8;
+    return out;
+  }
 
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.05);
     const t = clock.elapsedTime;
     const ph = REDUCED ? { id: 2, t: 0.5 } : phaseOf(t);
 
-    if (ph.id === 1 && lastPhase !== 1) {
-      // snapshot for the convergence
-      startPos.set(pos);
-    }
+    if (ph.id === 1 && lastPhase !== 1) startPos.set(pos);
     if (ph.id === 3 && lastPhase !== 3) {
-      // blast outward from the seal centre
       for (let i = 0; i < N; i++) {
         const tx = targets[i * 3], ty = targets[i * 3 + 1];
         const l = Math.max(0.001, Math.hypot(tx, ty));
@@ -354,6 +379,9 @@ export function initHeroScene(canvas, opts = {}) {
         burstVel[i * 3 + 1] = (ty / l) * (1.4 + Math.random() * 1.6);
         burstVel[i * 3 + 2] = (Math.random() - 0.5) * 1.4;
       }
+    }
+    if (ph.id === 0 && lastPhase === 3) {
+      for (let i = 0; i < NR; i++) returning[i] = 0;
     }
     lastPhase = ph.id;
 
@@ -364,15 +392,11 @@ export function initHeroScene(canvas, opts = {}) {
     camera.position.x = mx * 0.36;
     camera.lookAt(stage.position.x * 0.5, stage.position.y, 0);
 
-    const mpx = stage.position.x + mx * 2.6;
-    const mpy = stage.position.y - my * 1.5;
-
-    // stamp flare envelope
     const flare = ph.id === 2 ? Math.max(0, 1 - ph.t * 3.2) : 0;
-    const holdGlow = ph.id === 2 ? 0.55 + Math.sin(t * 3) * 0.1 : 0;
+    const lockA = ph.id === 2 ? Math.min(1, ph.t * 2.4) : ph.id === 3 ? Math.max(0, 1 - ph.t * 4) : 0;
+
     if (flare > 0.01) {
-      const s = 0.6 + flare * 5.5;
-      shock.scale.setScalar(s);
+      shock.scale.setScalar(0.6 + flare * 5.5);
       shock.material.opacity = 0.75 * flare;
       shock.quaternion.copy(camera.quaternion);
       flash.material.opacity = 0.85 * flare;
@@ -382,97 +406,79 @@ export function initHeroScene(canvas, opts = {}) {
       flash.material.opacity = 0;
       pMat.size = ph.id === 2 ? 0.105 : 0.085;
     }
-    // lock ring: draws itself in during the hold
-    const lockA = ph.id === 2 ? Math.min(1, ph.t * 2.4) : ph.id === 3 ? Math.max(0, 1 - ph.t * 4) : 0;
 
-    // the tech constellation: stations sweep the field, harvest, and kick
-    constellation.rotation.y = t * 0.09;
-    for (let k = 0; k < artifacts.length; k++) {
-      const g = artifacts[k];
-      const st = artState[k];
-      st.kickT *= Math.exp(-dt * 3.2);
-      st.act += (st.hits * 14 - st.act) * Math.min(1, dt * 4);
-      st.hits = 0;
-      const bump = 1 + st.kickT * 0.32;
-      g.scale.setScalar(bump);
-      g.position.y = st.baseY + Math.sin(t * 1.1 + k * 2.1) * 0.08;
-      const spinBoost = 0.35 * (1 + st.act * 3 + st.kickT * 2);
-      g.rotation.x += g.userData.spin.x * dt * spinBoost;
-      g.rotation.y += g.userData.spin.y * dt * spinBoost;
-      g.rotation.z += g.userData.spin.z * dt * spinBoost;
-      certDots[k].opacity = Math.min(1, 0.35 + st.act * 0.7 + st.kickT * 0.5 + lockA * 0.45);
-      tethers[k].opacity = Math.min(1, 0.1 + st.act * 0.5 + lockA * 0.5);
+    // stations breathe with their load
+    chipState.kickT *= Math.exp(-dt * 3.2);
+    chipState.act += (chipState.hits * 30 - chipState.act) * Math.min(1, dt * 4);
+    chipState.hits = 0;
+    chipGroup.scale.setScalar(1 + chipState.kickT * 0.28 + chipState.act * 0.05);
+    chipGroup.rotation.y += dt * (0.2 + chipState.act * 0.8);
+    chipDotMat.opacity = Math.min(1, 0.4 + chipState.act * 0.9 + chipState.kickT * 0.5);
+    for (let c = 0; c < 3; c++) {
+      cubeAct[c] *= Math.exp(-dt * 2.2);
+      chainGroups[c].rotation.y += dt * 0.25;
+      chainGroups[c].userData.dot.opacity = Math.min(1, 0.35 + cubeAct[c] * 0.8);
+      chainGroups[c].scale.setScalar(1 + cubeAct[c] * 0.16);
     }
-    lockRing.material.opacity = lockA;
+    ingestGroup.rotation.z = 0.62 + Math.sin(t * 0.6) * 0.05;
+    heartAct *= Math.exp(-dt * 1.6);
+    heart.material.opacity = Math.min(1, 0.12 + heartAct * 0.5 + lockA * 0.45 + flare * 0.6);
+    heart.scale.setScalar(1.5 + heartAct * 0.9 + flare * 1.6);
+    lockRing.material.opacity = 0.14 + lockA * 0.85 + heartAct * 0.12;
     lockRing.rotation.z += dt * 0.15;
-    pMat.opacity = ph.id === 2 ? 1.0 : 0.92;
+    pMat.opacity = ph.id === 2 ? 1.0 : 0.93;
 
     if (!REDUCED) {
+      const mpx = stage.position.x + mx * 2.6;
+      const mpy = stage.position.y - my * 1.5;
       for (let i = 0; i < N; i++) {
         const i3 = i * 3;
         const sd = seeds[i];
-        if (ph.id === 0 && ejecta[i]) {
-          // certified mote flying from a station toward the seal
-          pos[i3] += vel[i3] * dt;
-          pos[i3 + 1] += vel[i3 + 1] * dt;
-          pos[i3 + 2] += vel[i3 + 2] * dt;
-          const damp = Math.exp(-dt * 1.15);
-          vel[i3] *= damp; vel[i3 + 1] *= damp; vel[i3 + 2] *= damp;
-          if (vel[i3] * vel[i3] + vel[i3 + 1] * vel[i3 + 1] + vel[i3 + 2] * vel[i3 + 2] < 0.09) {
-            ejecta[i] = 0;
+        if (ph.id === 0 && isRiver[i] && returning[i] < 1) {
+          // gliding back onto the river after the burst
+          returning[i] = Math.min(1, returning[i] + dt / 1.4);
+          riverPos(i, tmpV);
+          const e = smoothstep(returning[i]);
+          pos[i3] += (tmpV.x - pos[i3]) * e;
+          pos[i3 + 1] += (tmpV.y - pos[i3 + 1]) * e;
+          pos[i3 + 2] += (tmpV.z - pos[i3 + 2]) * e;
+        } else if (ph.id === 0 && isRiver[i]) {
+          const prevU = uParam[i];
+          uParam[i] = Math.min(1, prevU + riverSpeed[i] * dt);
+          // sign crossing: the mote is certified white-hot
+          if (prevU < uSign && uParam[i] >= uSign) {
+            heat[i] = 1;
+            hotFlag[i] = 1;
+            chipState.hits++;
+            chipState.kickT = 1;
           }
+          // chain cubes tick as the river threads them
+          for (let c = 0; c < 3; c++) {
+            if (prevU < uChain[c] && uParam[i] >= uChain[c]) cubeAct[c] = 1;
+          }
+          if (uParam[i] >= 0.995) {
+            // absorbed by the seal
+            uParam[i] = Math.random() * 0.04;
+            heartAct = Math.min(1.6, heartAct + 0.045);
+          }
+          riverPos(i, tmpV);
+          pos[i3] = tmpV.x;
+          pos[i3 + 1] = tmpV.y;
+          pos[i3 + 2] = tmpV.z;
         } else if (ph.id === 0) {
-          // living flow field, harvested by the passing stations
+          // ambient drift: the raw data cloud
           const x = pos[i3], y = pos[i3 + 1], z = pos[i3 + 2];
-          let vx = Math.sin(y * 1.35 + t * 0.45 + sd) * 0.34 + Math.sin(z * 0.8 + t * 0.2) * 0.12;
-          let vy = Math.sin(z * 1.1 + t * 0.35 + sd * 1.7) * 0.3 - 0.03;
-          let vz = Math.sin(x * 0.9 + t * 0.3 + sd * 0.6) * 0.16;
-          // nearest station
-          let ak = -1, ad2 = 1e9, adx = 0, ady = 0, adz = 0;
-          for (let k = 0; k < artLocal.length; k++) {
-            const dx = x - artLocal[k].x, dy = y - artLocal[k].y, dz = z - artLocal[k].z;
-            const d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < ad2) { ad2 = d2; ak = k; adx = dx; ady = dy; adz = dz; }
-          }
-          const ATTRACT = 1.05;
-          if (ad2 < ATTRACT * ATTRACT) {
-            const ad = Math.sqrt(ad2);
-            const ux = adx / ad, uy = ady / ad, uz = adz / ad;
-            if (ad < 0.18) {
-              // arrival: the station certifies the mote and fires it at the seal
-              heat[i] = 1;
-              hotFlag[i] = 1;
-              ejecta[i] = 1;
-              const sp = 1.9 + Math.random() * 1.4;
-              const al = Math.max(0.3, Math.hypot(artLocal[ak].x, artLocal[ak].y, artLocal[ak].z));
-              vel[i3] = -artLocal[ak].x / al * sp;
-              vel[i3 + 1] = -artLocal[ak].y / al * sp;
-              vel[i3 + 2] = -artLocal[ak].z / al * sp;
-              artState[ak].hits++;
-              artState[ak].kickT = 1;
-            } else {
-              // spiral capture: pull inward plus a tangential swirl
-              const pull = (ATTRACT - ad) * 1.9 * dt;
-              const tx = uy, ty = -uz * 0.4 - ux * 0.2, tz = uy * 0.4 - uy * 0;
-              vx -= ux * pull * 5;
-              vy -= uy * pull * 5;
-              vz -= uz * pull * 5;
-              vx += tx * pull * 3;
-              vy += ty * pull * 3;
-              vz += (ux * 0.5) * pull * 3;
-            }
-          }
+          const vx = Math.sin(y * 1.35 + t * 0.45 + sd) * 0.34 + Math.sin(z * 0.8 + t * 0.2) * 0.12;
+          const vy = Math.sin(z * 1.1 + t * 0.35 + sd * 1.7) * 0.3 - 0.03;
+          const vz = Math.sin(x * 0.9 + t * 0.3 + sd * 0.6) * 0.16;
           pos[i3] += vx * dt;
           pos[i3 + 1] += vy * dt;
           pos[i3 + 2] += vz * dt;
-          // soft containment
           const dcx = pos[i3] * 0.42, dcy = pos[i3 + 1] * 0.55;
-          const d = dcx * dcx + dcy * dcy;
-          if (d > 1) {
-            pos[i3] -= dcx * 0.02 * dt * 60 * 0.016;
-            pos[i3 + 1] -= dcy * 0.02 * dt * 60 * 0.016;
+          if (dcx * dcx + dcy * dcy > 1) {
+            pos[i3] -= dcx * 0.02;
+            pos[i3 + 1] -= dcy * 0.02;
           }
-          // the swarm flees the pointer
           const rdx = pos[i3] - mpx + stage.position.x, rdy = pos[i3 + 1] - mpy;
           const rd2 = rdx * rdx + rdy * rdy;
           if (rd2 < 1.2) {
@@ -482,32 +488,24 @@ export function initHeroScene(canvas, opts = {}) {
             pos[i3 + 1] += (rdy / rl) * f;
           }
         } else if (ph.id === 1) {
-          // convergence: each mote dives to its sigil slot
           const tp = Math.min(1, Math.max(0, (ph.t - delays[i] * 0.5) / 0.5));
           const e = easeOut(tp);
           pos[i3] = startPos[i3] + (targets[i3] - startPos[i3]) * e;
           pos[i3 + 1] = startPos[i3 + 1] + (targets[i3 + 1] - startPos[i3 + 1]) * e;
           pos[i3 + 2] = startPos[i3 + 2] + (targets[i3 + 2] - startPos[i3 + 2]) * e;
         } else if (ph.id === 2) {
-          // sealed: breathing lock with a whisper of life
           const j = 0.012;
           pos[i3] = targets[i3] + Math.sin(t * 2.6 + sd) * j;
           pos[i3 + 1] = targets[i3 + 1] + Math.cos(t * 2.2 + sd * 1.3) * j;
           pos[i3 + 2] = targets[i3 + 2] + Math.sin(t * 1.8 + sd) * j * 1.5;
         } else {
-          // burst
           pos[i3] += burstVel[i3] * dt * 2.1;
           pos[i3 + 1] += burstVel[i3 + 1] * dt * 2.1;
           pos[i3 + 2] += burstVel[i3 + 2] * dt * 2.1;
         }
       }
-      // stations in stage-local space for the capture math
-      for (let k = 0; k < artifacts.length; k++) {
-        artifacts[k].getWorldPosition(tmpV);
-        stage.worldToLocal(tmpV);
-        artLocal[k].copy(tmpV);
-      }
-      // certified heat: white-hot fade back to crimson
+
+      // certified heat fades back to crimson
       const cAttr = pGeo.attributes.color;
       for (let i = 0; i < N; i++) {
         if (!hotFlag[i]) continue;
@@ -530,6 +528,17 @@ export function initHeroScene(canvas, opts = {}) {
       pGeo.attributes.position.needsUpdate = true;
     }
 
+    // schematic labels track their stations
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    for (const { el, at } of tags) {
+      projV.copy(at());
+      stage.localToWorld(projV);
+      projV.project(camera);
+      const lx = (projV.x * 0.5 + 0.5) * cw;
+      const ly = (-projV.y * 0.5 + 0.5) * ch;
+      el.style.transform = `translate(${lx.toFixed(1)}px, ${ly.toFixed(1)}px) translate(-50%, 4px)`;
+    }
+
     renderer.render(scene, camera);
   }
 
@@ -540,10 +549,9 @@ export function initHeroScene(canvas, opts = {}) {
     get frames() { return frames; },
   };
   if (REDUCED) {
-    // render the formed sigil, static
-    pos.set(targets);
+    for (let i = 0; i < NR; i++) { uParam[i] = 0.2 + (i / NR) * 0.75; riverPos(i, tmpV); pos[i * 3] = tmpV.x; pos[i * 3 + 1] = tmpV.y; pos[i * 3 + 2] = tmpV.z; }
     pGeo.attributes.position.needsUpdate = true;
-    lockRing.material.opacity = 0.8;
+    lockRing.material.opacity = 0.9;
     frame();
   } else {
     renderer.setAnimationLoop(() => {
@@ -552,6 +560,6 @@ export function initHeroScene(canvas, opts = {}) {
   }
   return {
     getFrames: () => frames,
-    dispose() { renderer.setAnimationLoop(null); },
+    dispose() { renderer.setAnimationLoop(null); labelHost.remove(); },
   };
 }

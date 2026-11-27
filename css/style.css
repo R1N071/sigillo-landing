@@ -183,6 +183,23 @@ section { position: relative; }
   content: "·"; position: absolute; left: -16px; color: var(--text-faint); opacity: 0.5;
 }
 
+/* schematic station labels in the hero */
+.station-tags {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 1;
+}
+.station-tag {
+  position: absolute; top: 0; left: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #8b897f;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 1px 8px rgba(10, 10, 11, 0.95), 0 0 2px rgba(10, 10, 11, 0.9);
+  will-change: transform;
+}
+
 /* ============================================================
    2 · COUNTDOWN BAND
    ============================================================ */
@@ -576,6 +593,7 @@ footer {
   .tier-lead { transform: none; }
 }
 @media (max-width: 900px) {
+  .station-tag { display: none; }
   .pipeline { grid-template-columns: 1fr; }
   .pipeline-sticky {
     height: 58dvh; top: 64px;
