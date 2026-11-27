@@ -1,7 +1,7 @@
 // Sigillo landing: entrance motion, scroll reveals, counters,
 // the countdown to 20 January 2027, and module init.
 import { animate, inView, scroll } from 'motion';
-import { initLedger } from './ledger.js';
+import { initWitness } from './witness.js';
 import { initExplodeScene } from './explode.js';
 import { initPetri } from './petri.js';
 import { initTamper } from './tamper.js';
@@ -134,7 +134,7 @@ function magnetic() {
   });
 }
 
-// ---------- scene boot: ledger hero (2D, universal) + WebGL pipeline with fallback ----------
+// ---------- scene boot: witness hero (2D, universal) + WebGL pipeline with fallback ----------
 let using2D = false;
 let explodeHandle = null;
 
@@ -154,8 +154,8 @@ function switchTo2D(reason) {
 }
 
 function bootScenes() {
-  // the hero ledger is pure 2D: identical in every browser
-  safe('ledger', () => initLedger(document.getElementById('hero-canvas')));
+  // the hero is a Canvas2D software renderer: identical in every browser
+  safe('witness', () => initWitness(document.getElementById('hero-canvas')));
 
   const force2D = new URLSearchParams(location.search).get('renderer') === '2d';
   if (force2D || !webglAvailable()) {
