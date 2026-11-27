@@ -126,6 +126,131 @@ export function initHeroScene(canvas, opts = {}) {
   const swarm = new THREE.Points(pGeo, pMat);
   stage.add(swarm);
 
+  // ---------- the tech constellation: four artifacts orbiting the seal ----------
+  const constellation = new THREE.Group();
+  stage.add(constellation);
+
+  const artDark = new THREE.MeshStandardMaterial({ color: 0x1b1b21, metalness: 0.55, roughness: 0.4 });
+  const artEdge = new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.95 });
+  const brass = new THREE.MeshStandardMaterial({ color: 0x9a7b3f, metalness: 0.9, roughness: 0.3 });
+  const glowDotMat = () => new THREE.MeshBasicMaterial({ color: 0xff6369, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+
+  const certDots = [];
+  const tethers = [];
+  const artifacts = [];
+
+  function tether(from) {
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([from.clone(), new THREE.Vector3(0, 0, 0)]),
+      new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.18 })
+    );
+    constellation.add(line);
+    tethers.push(line.material);
+    return line;
+  }
+
+  // 1) the hash chain: three linked blocks
+  {
+    const g = new THREE.Group();
+    const bGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+    const pts = [[-0.2, -0.12, 0], [0, 0.06, 0.1], [0.2, 0.24, 0.02]];
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(bGeo, artDark);
+      b.position.set(...pts[i]);
+      b.add(new THREE.LineSegments(new THREE.EdgesGeometry(bGeo), artEdge));
+      g.add(b);
+      if (i > 0) {
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...pts[i - 1]), new THREE.Vector3(...pts[i])]),
+          new THREE.LineBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.6 })
+        );
+        g.add(line);
+      }
+    }
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), glowDotMat());
+    dot.position.set(0.2, 0.24, 0.02);
+    g.add(dot);
+    certDots.push(dot.material);
+    g.position.set(2.35, 0.55, 0);
+    g.userData.spin = { x: 0.3, y: 0.5, z: 0.1 };
+    constellation.add(g);
+    tether(g.position);
+    artifacts.push(g);
+  }
+
+  // 2) the TPM signing chip
+  {
+    const g = new THREE.Group();
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.36), artDark);
+    g.add(slab);
+    g.add(new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), artEdge));
+    for (let i = 0; i < 4; i++) {
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.08), brass);
+      pad.position.set(-0.19 + i * 0.13, 0.09, 0.13);
+      g.add(pad);
+      const pad2 = pad.clone();
+      pad2.position.z = -0.13;
+      g.add(pad2);
+    }
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowDotMat());
+    dot.position.y = 0.1;
+    g.add(dot);
+    certDots.push(dot.material);
+    g.position.set(0, -0.35, 2.45);
+    g.userData.spin = { x: 0.15, y: 0.6, z: 0 };
+    constellation.add(g);
+    tether(g.position);
+    artifacts.push(g);
+  }
+
+  // 3) the WORM vault
+  {
+    const g = new THREE.Group();
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.2, 24), artDark);
+    g.add(drum);
+    const ringTop = new THREE.Mesh(
+      new THREE.TorusGeometry(0.27, 0.012, 8, 40),
+      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.8 })
+    );
+    ringTop.rotation.x = Math.PI / 2;
+    ringTop.position.y = 0.11;
+    g.add(ringTop);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), glowDotMat());
+    dot.position.y = 0.16;
+    g.add(dot);
+    certDots.push(dot.material);
+    g.position.set(-2.4, 0.25, 0.4);
+    g.userData.spin = { x: 0.1, y: 0.7, z: 0.2 };
+    constellation.add(g);
+    tether(g.position);
+    artifacts.push(g);
+  }
+
+  // 4) the timestamp ring
+  {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.24, 0.014, 10, 48),
+      new THREE.MeshStandardMaterial({ color: 0x2a2c33, metalness: 0.7, roughness: 0.3, emissive: ACCENT, emissiveIntensity: 0.4 })
+    );
+    g.add(ring);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const tick = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.07, 0.016), new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.9 }));
+      tick.position.set(Math.cos(a) * 0.31, Math.sin(a) * 0.31, 0);
+      tick.rotation.z = a + Math.PI / 2;
+      g.add(tick);
+    }
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), glowDotMat());
+    g.add(dot);
+    certDots.push(dot.material);
+    g.position.set(-0.3, -0.6, -2.3);
+    g.userData.spin = { x: 0.5, y: 0.3, z: 0.4 };
+    constellation.add(g);
+    tether(g.position);
+    artifacts.push(g);
+  }
+
   // ---------- the stamp flare meshes ----------
   const shock = new THREE.Mesh(
     new THREE.RingGeometry(1.62, 1.72, 72),
@@ -185,6 +310,7 @@ export function initHeroScene(canvas, opts = {}) {
     const wide = w / h > 1.05;
     stage.position.set(wide ? 1.15 : 0, wide ? 1.95 : 1.45, 0);
     stage.scale.setScalar(wide ? 1.0 : 0.88);
+    constellation.scale.setScalar(wide ? 1 : 0.52);
     camera.updateProjectionMatrix();
   }
   place();
@@ -247,6 +373,18 @@ export function initHeroScene(canvas, opts = {}) {
     }
     // lock ring: draws itself in during the hold
     const lockA = ph.id === 2 ? Math.min(1, ph.t * 2.4) : ph.id === 3 ? Math.max(0, 1 - ph.t * 4) : 0;
+
+    // the tech constellation: slow orrery, artifacts alive, certified at the stamp
+    constellation.rotation.y = t * 0.09;
+    for (let i = 0; i < artifacts.length; i++) {
+      const g = artifacts[i];
+      g.position.y += Math.sin(t * 1.1 + i * 2.1) * 0.0012;
+      g.rotation.x += g.userData.spin.x * dt * 0.35;
+      g.rotation.y += g.userData.spin.y * dt * 0.35;
+      g.rotation.z += g.userData.spin.z * dt * 0.35;
+    }
+    for (const m of certDots) m.opacity = 0.55 + lockA * 0.45;
+    for (const m of tethers) m.opacity = 0.14 + lockA * 0.6;
     lockRing.material.opacity = lockA;
     lockRing.rotation.z += dt * 0.15;
     pMat.opacity = ph.id === 2 ? 1.0 : 0.92;

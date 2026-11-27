@@ -79,6 +79,99 @@ export function initFallbackHero(host, oldCanvas) {
   let lastPhase = -1;
   const easeOut = (x) => 1 - Math.pow(1 - x, 3);
 
+  // certification factor: 1 while the seal is stamped, fading in/out
+  function lockA2(ph) {
+    return ph.id === 2 ? Math.min(1, ph.t * 2.4) : ph.id === 3 ? Math.max(0, 1 - ph.t * 4) : 0;
+  }
+
+  // four tech artifacts orbiting the seal: hash chain, TPM chip, WORM vault, timestamp ring
+  function drawArtifacts(cx, cy, cert) {
+    const defs = [
+      { kind: 'chain', a0: 0.3, dy: -0.35, ph: 1.1 },
+      { kind: 'chip', a0: Math.PI * 0.55, dy: 0.25, ph: 2.6 },
+      { kind: 'vault', a0: Math.PI + 0.2, dy: -0.1, ph: 4.0 },
+      { kind: 'clock', a0: -Math.PI * 0.45, dy: 0.45, ph: 5.3 },
+    ];
+    for (const d of defs) {
+      const a = d.a0 + t * 0.09;
+      const depth = (Math.sin(a) + 1) / 2;
+      const sc = 0.72 + depth * 0.42;
+      const al = 0.45 + depth * 0.55;
+      const ox = cx + Math.cos(a) * R * (W / H > 1.05 ? 1.85 : 1.5);
+      const oy = cy + d.dy * R * 0.7 + Math.sin(a) * R * 0.42 + Math.sin(t * 1.2 + d.ph) * 5;
+
+      ctx.strokeStyle = `rgba(255,99,105,${(0.1 + cert * 0.55) * (0.35 + depth * 0.65)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.scale(sc, sc);
+      ctx.globalAlpha = al;
+      const glowA = 0.55 + cert * 0.45;
+
+      if (d.kind === 'chain') {
+        const pts = [[-16, 8], [0, -6], [16, -20]];
+        ctx.strokeStyle = 'rgba(255,99,105,0.7)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        ctx.lineTo(pts[1][0], pts[1][1]);
+        ctx.lineTo(pts[2][0], pts[2][1]);
+        ctx.stroke();
+        for (const [bx, by] of pts) {
+          ctx.fillStyle = '#1b1b21';
+          ctx.strokeStyle = 'rgba(255,110,116,1)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.rect(bx - 6, by - 6, 12, 12);
+          ctx.fill(); ctx.stroke();
+        }
+      } else if (d.kind === 'chip') {
+        ctx.fillStyle = '#1b1b21';
+        ctx.strokeStyle = 'rgba(255,110,116,1)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(-19, -8, 38, 16, 2);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#b08d4a';
+        for (let i = 0; i < 4; i++) {
+          ctx.fillRect(-15 + i * 9, -6, 5, 4);
+          ctx.fillRect(-15 + i * 9, 2, 5, 4);
+        }
+      } else if (d.kind === 'vault') {
+        ctx.fillStyle = '#1b1b21';
+        ctx.strokeStyle = 'rgba(255,110,116,1)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(0, 2, 15, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, -5, 12, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = `rgba(255,99,105,${glowA})`;
+        ctx.beginPath(); ctx.ellipse(0, -10, 9, 4, 0, 0, Math.PI * 2); ctx.stroke();
+      } else {
+        ctx.strokeStyle = 'rgba(255,110,116,1)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 8; i++) {
+          const ta = (i / 8) * Math.PI * 2 + t * 0.4;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ta) * 13, Math.sin(ta) * 13);
+          ctx.lineTo(Math.cos(ta) * 17, Math.sin(ta) * 17);
+          ctx.strokeStyle = 'rgba(255,110,116,0.8)';
+          ctx.stroke();
+        }
+      }
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+      g.addColorStop(0, `rgba(255,99,105,${0.22 + cert * 0.5})`);
+      g.addColorStop(1, 'rgba(255,99,105,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
   function draw() {
     const ph = REDUCED ? { id: 2, t: 0.5 } : phaseOf(t);
     ctx.clearRect(0, 0, W, H);
@@ -204,6 +297,9 @@ export function initFallbackHero(host, oldCanvas) {
       ctx.shadowBlur = 0;
     }
     ctx.restore();
+
+    // ---------- the tech constellation: solid artifacts over the swarm ----------
+    drawArtifacts(cx, cy, lockA2(ph));
   }
 
   let running = true;
