@@ -1,7 +1,7 @@
-// The witness: an industrial arm works a pick-and-place loop on the engraved
-// seal. Every grip, move and place is captured into a glass evidence crystal
-// holding a frozen snapshot of that exact pose; the crystals chain into a
-// helix rising around the machine. Periodically one crystal is edited - its
+// The witness: a work cell of five machines - arm, AMR, drone, humanoid,
+// quadruped - hands a crate around a loop on the engraved seal. Every action
+// is captured into a glass evidence crystal holding a frozen snapshot of the
+// machine that did it; the crystals chain into a helix rising over the cell. Periodically one crystal is edited - its
 // snapshot changes, it cracks red, the chain below it breaks - until the
 // sealed copy descends and restores it.
 // A small software 3D renderer on Canvas2D (perspective, flat lighting,
@@ -32,8 +32,8 @@ export function initWitness(canvas) {
     canvas.height = Math.round(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     wide = W / H > 1.05;
-    if (wide) { F = min(H * 0.98, W * 0.7); CX = W * 0.71; CY = H * 0.5; }
-    else { F = min(W * 0.95, H * 0.46); CX = W * 0.5; CY = H * 0.8; }
+    if (wide) { F = min(H * 1.0, W * 0.68); CX = W * 0.71; CY = H * 0.5; }
+    else { F = min(W * 0.85, H * 0.42); CX = W * 0.5; CY = H * 0.79; }
     if (ready) draw();
   }
   place();
@@ -50,8 +50,8 @@ export function initWitness(canvas) {
   // ---------- camera ----------
   const cam = { ex: 0, ey: 0, ez: 0, fx: 0, fy: 0, fz: 0, rx: 0, rz: 0, ux: 0, uy: 0, uz: 0 };
   function setCamera(yaw, lift) {
-    const D = 9.5, ty = 2.5;
-    cam.ex = sin(yaw) * D; cam.ez = cos(yaw) * D; cam.ey = 3.6 + lift;
+    const D = 11, ty = 2.3;
+    cam.ex = sin(yaw) * D; cam.ez = cos(yaw) * D; cam.ey = 4.1 + lift;
     let fx = -cam.ex, fy = ty - cam.ey, fz = -cam.ez;
     const fl = hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
     let rx = -fz, rz = fx;
@@ -164,6 +164,42 @@ export function initWitness(canvas) {
     face(bot, apN(T, 0, -1, 0), mat, glow, layer);
   }
 
+  // ---------- the cell: five machines hand one crate around an 18 s loop ----------
+  // AMR docks with the crate -> arm moves it to the pad -> humanoid inspects ->
+  // drone flies it back onto the staged AMR -> AMR returns to the dock.
+  // A quadruped patrols the perimeter. Every action is captured into the chain.
+  const CYC = 18;
+  const GO = 0.52, GC = 0.35, DECK = 0.48;
+  const PB = [1.5 * cos(-2.4), 0.18, -1.5 * sin(-2.4)];
+  const RA_ = 2.5, PHI_D = -0.45, PHI_W = 2.6;
+  const DOG_R = 3.7, DA = -0.15, DB = 0.95;
+  const onRing = (r, a, y = 0) => [r * cos(a), y, -r * sin(a)];
+  const angTo = (c, t, k) => c + atan2(sin(t - c), cos(t - c)) * k;
+  const W_ = onRing(RA_, PHI_W);
+
+  // eased keyframes; `arc` on a key lifts y along that segment
+  function kf(keys, u) {
+    if (u <= keys[0][0]) return { ...keys[0][1] };
+    for (let i = 1; i < keys.length; i++) {
+      const [t1, b] = keys[i];
+      if (u <= t1) {
+        const [t0, a] = keys[i - 1];
+        const k = t1 > t0 ? ease((u - t0) / (t1 - t0)) : 1;
+        const o = {};
+        for (const key in b) if (key !== 'arc') o[key] = lerp(a[key], b[key], k);
+        if (b.arc) o.y += b.arc * sin(PI * k);
+        return o;
+      }
+    }
+    return { ...keys[keys.length - 1][1] };
+  }
+  const L2W = (T) => (p) => ap(T, p[0], p[1], p[2]);
+  function limb(T, a, b, w, d, mat, glow = 0) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    box(mul(T, tr((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), rotZ(atan2(dy, dx))), hypot(dx, dy) + w * 0.4, w, d, mat, glow);
+  }
+  const loop4 = (T, hx, y, hz) => [[-hx, y, -hz], [hx, y, -hz], [hx, y, hz], [-hx, y, hz]].map(L2W(T));
+
   // ---------- the arm: geometry + inverse kinematics ----------
   const SY = 0.95, L1 = 1.55, L2 = 1.35, LG = 0.49;
   function solve(tip) {
@@ -177,7 +213,6 @@ export function initWitness(canvas) {
     return { th, a1, a2, E, Wr: [wx, wy] };
   }
   const plane = (th, u, y) => [u * cos(th), y, -u * sin(th)];
-
   function buildArm(ps, g, glow) {
     const Y = rotY(ps.th);
     const { a1, a2, E, Wr } = ps;
@@ -193,31 +228,248 @@ export function initWitness(canvas) {
     box(mul(Y, tr(Wr[0], Wr[1] - 0.17, 0)), 0.6, 0.12, 0.24, MAT.metal);
     for (const s of [-1, 1]) box(mul(Y, tr(Wr[0] + (s * g) / 2, Wr[1] - 0.36, 0)), 0.05, 0.26, 0.18, MAT.dark, glow * 0.25);
   }
+  const HOME = { th: -1.25, r: 1.15, y: 1.7, g: GO };
+  const ARM_KEYS = [
+    [0.4, HOME],
+    [1.0, { th: PHI_D, r: RA_, y: 1.35, g: GO }],
+    [1.4, { th: PHI_D, r: RA_, y: DECK + 0.06, g: GO }],
+    [1.55, { th: PHI_D, r: RA_, y: DECK + 0.06, g: GC }],
+    [2.1, { th: PHI_D, r: RA_, y: 1.35, g: GC }],
+    [3.2, { th: -2.4, r: 1.5, y: 1.3, g: GC, arc: 0.5 }],
+    [3.75, { th: -2.4, r: 1.5, y: 0.24, g: GC }],
+    [3.95, { th: -2.4, r: 1.5, y: 0.24, g: GO }],
+    [4.4, { th: -2.4, r: 1.5, y: 1.3, g: GO }],
+    [5.0, HOME],
+  ];
+  const arm = {
+    name: 'ARM', glow: 0, k: HOME, ps: null, tip: [0, 0, 0],
+    step(u) {
+      const k = kf(ARM_KEYS, u);
+      if (u > 5) { const w = u - 5; k.y += 0.05 * sin(w * 1.3); k.th += 0.1 * sin(w * 0.45); }
+      this.k = k;
+      this.tip = [k.r * cos(k.th), k.y, -k.r * sin(k.th)];
+      this.ps = solve(this.tip);
+    },
+    joints() {
+      const ps = this.ps;
+      return [[0, 0.18, 0], [0, 0.76, 0], plane(ps.th, 0, SY), plane(ps.th, ps.E[0], ps.E[1]), plane(ps.th, ps.Wr[0], ps.Wr[1]), this.tip.slice()];
+    },
+    snap() { return [{ pts: this.joints(), joints: true }]; },
+    emit() { return this.joints()[2 + ((random() * 4) | 0)]; },
+    cap() { return this.tip; },
+    ring() { return { c: [0, 0], r: 1.0, y0: 0.25, y1: 2.9 }; },
+    build() { buildArm(this.ps, this.k.g, this.glow); },
+  };
 
-  // ---------- the task: pick and place between two pads ----------
-  const PADS = [{ th: -0.5, r: 1.62 }, { th: -2.4, r: 1.5 }];
-  const C = 4.4, HOV = 1.3, LOW = 0.24, GO = 0.52, GC = 0.35;
-  const EVENTS = [[1.0, 'GRIP'], [2.4, 'MOVE'], [3.75, 'PLACE']];
-  function task(time) {
-    const k = Math.floor(time / C), u = time - k * C;
-    const Pp = PADS[k % 2], Q = PADS[(k + 1) % 2];
-    let th = Pp.th, r = Pp.r, y = HOV, g = GO, carry = false, at = k % 2;
-    if (u < 0.8) y = lerp(HOV, LOW, ease(u / 0.8));
-    else if (u < 1.1) { y = LOW; g = lerp(GO, GC, ease((u - 0.8) / 0.25)); carry = u > 1.0; }
-    else if (u < 1.8) { y = lerp(LOW, HOV, ease((u - 1.1) / 0.7)); g = GC; carry = true; }
-    else if (u < 3.0) {
-      const s = ease((u - 1.8) / 1.2);
-      th = lerp(Pp.th, Q.th, s); r = lerp(Pp.r, Q.r, s); y = HOV + 0.45 * sin(PI * s); g = GC; carry = true;
-    } else if (u < 3.6) { th = Q.th; r = Q.r; y = lerp(HOV, LOW, ease((u - 3.0) / 0.6)); g = GC; carry = true; }
-    else if (u < 3.9) {
-      th = Q.th; r = Q.r; y = LOW; g = lerp(GC, GO, ease((u - 3.65) / 0.25));
-      carry = u < 3.7; if (!carry) at = (k + 1) % 2;
-    } else { th = Q.th; r = Q.r; y = lerp(LOW, HOV, ease((u - 3.9) / 0.5)); at = (k + 1) % 2; }
-    return { th, tip: [r * cos(th), y, -r * sin(th)], g, carry, at };
-  }
+  // ---------- AMR: circles the seal on its lane, docks, stages ----------
+  const AMR_KEYS = [[4.6, { p: PHI_D }], [7.6, { p: PHI_W }], [13.0, { p: PHI_W }], [17.6, { p: PHI_D + PI * 2 }]];
+  const amr = {
+    name: 'AMR', glow: 0, p: PHI_D, pos: onRing(RA_, PHI_D), yaw: PHI_D + PI / 2, spin: 0,
+    step(u, dt) {
+      const p = kf(AMR_KEYS, u).p;
+      const d = Math.abs(atan2(sin(p - this.p), cos(p - this.p)));
+      this.p = p;
+      this.pos = onRing(RA_, p);
+      this.yaw = p + PI / 2;
+      this.spin += (d * RA_) / 0.11;
+    },
+    T() { return mul(tr(this.pos[0], 0, this.pos[2]), rotY(this.yaw)); },
+    snap() {
+      const T = this.T();
+      return [{ pts: loop4(T, 0.48, 0.45, 0.33), loop: true }, { pts: [[0, 0.45, 0], [0.48, 0.52, 0]].map(L2W(T)), joints: true }];
+    },
+    emit() { return ap(this.T(), 0.36, 0.55, 0); },
+    cap() { return [this.pos[0], 0.6, this.pos[2]]; },
+    ring() { return { c: [this.pos[0], this.pos[2]], r: 0.75, y0: 0.05, y1: 0.95 }; },
+    build() {
+      const T = this.T();
+      for (const [x, z] of [[0.32, 0.36], [-0.32, 0.36], [0.32, -0.36], [-0.32, -0.36]]) {
+        cyl(mul(T, tr(x, 0.11, z), rotX(PI / 2), rotY(this.spin)), 0.11, 0.07, 10, MAT.dark);
+      }
+      box(mul(T, tr(0, 0.28, 0)), 0.95, 0.34, 0.66, MAT.metal);
+      box(mul(T, tr(-0.02, 0.465, 0)), 0.78, 0.03, 0.56, MAT.dark);
+      box(mul(T, tr(0.485, 0.24, 0)), 0.03, 0.1, 0.58, MAT.accent, this.glow * 0.6);
+      cyl(mul(T, tr(0.36, 0.52, 0)), 0.08, 0.09, 12, MAT.accent, 0.25 + this.glow * 0.6);
+    },
+  };
+
+  // ---------- drone: picks the crate off the pad, drops it on the staged AMR ----------
+  const HD = { x: 2.9, y: 3.3, z: -2.0 };
+  const DR_KEYS = [
+    [8.4, HD],
+    [9.6, { x: PB[0], y: 2.4, z: PB[2] }],
+    [10.2, { x: PB[0], y: 0.66, z: PB[2] }],
+    [10.4, { x: PB[0], y: 0.66, z: PB[2] }],
+    [11.0, { x: PB[0], y: 2.6, z: PB[2] }],
+    [12.1, { x: W_[0], y: 2.2, z: W_[2] }],
+    [12.35, { x: W_[0], y: DECK + 0.48, z: W_[2] }],
+    [12.6, { x: W_[0], y: DECK + 0.48, z: W_[2] }],
+    [13.2, { x: W_[0], y: 2.0, z: W_[2] }],
+    [14.6, HD],
+  ];
+  const ROTORS = [[0.34, 0.34], [0.34, -0.34], [-0.34, 0.34], [-0.34, -0.34]];
+  const drone = {
+    name: 'DRONE', glow: 0, pos: [HD.x, HD.y, HD.z], yaw: PI, tilt: 0, spin: 0,
+    step(u, dt) {
+      const k = kf(DR_KEYS, u);
+      const prev = this.pos;
+      this.pos = [k.x, k.y + 0.05 * sin(tau * 2.1), k.z];
+      const vx = (this.pos[0] - prev[0]) / max(dt, 1e-3), vz = (this.pos[2] - prev[2]) / max(dt, 1e-3);
+      const hs = hypot(vx, vz);
+      if (hs > 0.15) this.yaw = angTo(this.yaw, atan2(-vz, vx), min(1, dt * 4));
+      this.tilt += (clamp(hs * 0.09, 0, 0.32) - this.tilt) * min(1, dt * 5);
+      this.spin += dt * 38;
+    },
+    T() { return mul(tr(this.pos[0], this.pos[1], this.pos[2]), rotY(this.yaw), rotZ(-this.tilt)); },
+    snap() {
+      const T = this.T(), w = L2W(T);
+      const out = [
+        { pts: [[0.34, 0, 0.34], [-0.34, 0, -0.34]].map(w), joints: true },
+        { pts: [[0.34, 0, -0.34], [-0.34, 0, 0.34]].map(w), joints: true },
+        { pts: loop4(T, 0.18, 0.02, 0.15), loop: true },
+      ];
+      for (const [x, z] of ROTORS) out.push({ pts: [[x - 0.15, 0.05, z], [x, 0.05, z - 0.15], [x + 0.15, 0.05, z], [x, 0.05, z + 0.15]].map(w), loop: true });
+      return out;
+    },
+    emit() { const [x, z] = ROTORS[(random() * 4) | 0]; return ap(this.T(), x, 0.05, z); },
+    cap() { return this.pos; },
+    ring() { return { c: [this.pos[0], this.pos[2]], r: 0.62, y0: this.pos[1] - 0.55, y1: this.pos[1] + 0.4 }; },
+    build() {
+      const T = this.T();
+      box(T, 0.36, 0.11, 0.3, MAT.metal);
+      box(mul(T, tr(0, 0.07, 0)), 0.2, 0.03, 0.16, MAT.accent, 0.3 + this.glow * 0.7);
+      box(mul(T, rotY(PI / 4)), 0.96, 0.04, 0.05, MAT.dark);
+      box(mul(T, rotY(-PI / 4)), 0.96, 0.04, 0.05, MAT.dark);
+      ROTORS.forEach(([x, z], i) => {
+        cyl(mul(T, tr(x, 0.05, z)), 0.18, 0.015, 12, MAT.dark, this.glow * 0.3);
+        box(mul(T, tr(x, 0.065, z), rotY(this.spin * (i % 2 ? 1 : -1))), 0.34, 0.01, 0.04, MAT.metal);
+      });
+      for (const z of [0.12, -0.12]) box(mul(T, tr(0, -0.13, z)), 0.42, 0.03, 0.03, MAT.dark);
+      box(mul(T, tr(0, -0.12, 0)), 0.06, 0.12, 0.06, MAT.dark);
+    },
+  };
+
+  // ---------- humanoid: walks in, inspects the placed crate, walks out ----------
+  const S1 = [-3.05, 0, 0.45], S2 = [-2.4, 0, 1.55];
+  const HU_KEYS = [[4.2, { x: S1[0], z: S1[2] }], [6.0, { x: S2[0], z: S2[2] }], [7.8, { x: S2[0], z: S2[2] }], [9.6, { x: S1[0], z: S1[2] }]];
+  const human = {
+    name: 'HUMANOID', glow: 0, pos: S1.slice(), yaw: 0, walk: 0, ph: 0, point: 0,
+    step(u, dt) {
+      const k = kf(HU_KEYS, u);
+      const dx = k.x - this.pos[0], dz = k.z - this.pos[2];
+      const sp = hypot(dx, dz) / max(dt, 1e-3);
+      this.pos = [k.x, 0, k.z];
+      this.walk += (clamp(sp / 0.7, 0, 1) - this.walk) * min(1, dt * 6);
+      this.ph += sp * dt * 5.2;
+      let want;
+      if (sp > 0.08) want = atan2(-dz, dx);
+      else if (u > 5 && u < 8.5) want = atan2(-(PB[2] - k.z), PB[0] - k.x);
+      else want = atan2(k.z, -k.x);
+      this.yaw = angTo(this.yaw, want, min(1, dt * 5));
+      this.point = ease((u - 6.3) / 0.4) * (1 - ease((u - 7.4) / 0.4));
+    },
+    T() { return mul(tr(this.pos[0], 0, this.pos[2]), rotY(this.yaw)); },
+    skel() {
+      const w = this.walk, ph = this.ph;
+      const pel = 0.92 + 0.03 * Math.abs(sin(ph)) * w;
+      const legs = [], arms = [];
+      for (const [side, off] of [[-1, 0], [1, PI]]) {
+        const s = sin(ph + off);
+        const a = 0.42 * s * w;
+        const kb = (0.15 + 0.55 * max(0, cos(ph + off))) * w + 0.05;
+        const hip = [0, pel, side * 0.11];
+        const knee = [0.44 * sin(a), pel - 0.44 * cos(a), hip[2]];
+        legs.push([hip, knee, [knee[0] + 0.44 * sin(a - kb), knee[1] - 0.44 * cos(a - kb), hip[2]]]);
+        const pt = side > 0 ? this.point : 0;
+        const b = lerp(-0.38 * s * w, 1.45, pt);
+        const sh = [0, pel + 0.58, side * 0.29];
+        const el = [0.3 * sin(b), sh[1] - 0.3 * cos(b), sh[2]];
+        const bb = b + lerp(0.25, 0.02, pt);
+        arms.push([sh, el, [el[0] + 0.28 * sin(bb), el[1] - 0.28 * cos(bb), sh[2]]]);
+      }
+      return { pel, legs, arms };
+    },
+    snap() {
+      const { pel, legs, arms } = this.skel(), w = L2W(this.T());
+      return [
+        { pts: [[0, pel, 0], [0, pel + 0.6, 0], [0, pel + 0.95, 0]].map(w), joints: true },
+        { pts: [arms[0][0], arms[1][0]].map(w) },
+        { pts: [legs[0][0], legs[1][0]].map(w) },
+        ...arms.map((l) => ({ pts: l.map(w), joints: true })),
+        ...legs.map((l) => ({ pts: l.map(w), joints: true })),
+      ];
+    },
+    emit() { const { pel, arms } = this.skel(); return ap(this.T(), ...(random() < 0.5 ? [0, pel + 0.82, 0] : arms[1][2])); },
+    cap() { return ap(this.T(), 0, 1.75, 0); },
+    ring() { return { c: [this.pos[0], this.pos[2]], r: 0.55, y0: 0.05, y1: 1.95 }; },
+    build() {
+      const T = this.T(), { pel, legs, arms } = this.skel(), g = this.glow;
+      for (const [hip, knee, foot] of legs) { limb(T, hip, knee, 0.12, 0.13, MAT.dark); limb(T, knee, foot, 0.1, 0.11, MAT.metal); }
+      box(mul(T, tr(0, pel, 0)), 0.2, 0.14, 0.32, MAT.dark);
+      box(mul(T, tr(0, pel + 0.32, 0)), 0.24, 0.52, 0.46, MAT.crate);
+      box(mul(T, tr(0.125, pel + 0.42, 0)), 0.02, 0.06, 0.12, MAT.accent, 0.3 + g * 0.7);
+      box(mul(T, tr(0, pel + 0.82, 0)), 0.22, 0.25, 0.21, MAT.crate);
+      box(mul(T, tr(0.115, pel + 0.84, 0)), 0.03, 0.07, 0.16, MAT.accent, 0.35 + g * 0.65);
+      for (const [sh, el, ha] of arms) { limb(T, sh, el, 0.09, 0.1, MAT.dark); limb(T, el, ha, 0.08, 0.09, MAT.metal); }
+    },
+  };
+
+  // ---------- quadruped: patrols the perimeter, logs checkpoints ----------
+  const DOG_KEYS = [[0.5, { p: DA }], [6.0, { p: DB }], [7.8, { p: DB }], [13.3, { p: DA }]];
+  const dog = {
+    name: 'QUADRUPED', glow: 0, p: DA, pos: onRing(DOG_R, DA), yaw: DA + PI / 2, walk: 0, ph: 0, head: 0,
+    step(u, dt) {
+      const p = kf(DOG_KEYS, u).p, dp = p - this.p;
+      const sp = (Math.abs(dp) * DOG_R) / max(dt, 1e-3);
+      this.p = p;
+      this.pos = onRing(DOG_R, p);
+      this.walk += (clamp(sp / 0.5, 0, 1) - this.walk) * min(1, dt * 5);
+      this.ph += sp * dt * 7;
+      if (Math.abs(dp) > 1e-5) this.yaw = angTo(this.yaw, dp > 0 ? p + PI / 2 : p - PI / 2, min(1, dt * 3));
+      this.head = 0.6 * sin(tau * 1.4) * (1 - this.walk);
+    },
+    T() { return mul(tr(this.pos[0], 0, this.pos[2]), rotY(this.yaw)); },
+    legs() {
+      const w = this.walk;
+      return [[0.3, 0.15, 0, 1], [-0.3, -0.15, 0, -1], [0.3, -0.15, PI, 1], [-0.3, 0.15, PI, -1]].map(([x, z, off, front]) => {
+        const a = 0.4 * sin(this.ph + off) * w;
+        const kb = 0.5 + 0.55 * max(0, cos(this.ph + off)) * w;
+        const hip = [x, 0.47, z];
+        const knee = [x + 0.24 * sin(a), 0.47 - 0.24 * cos(a), z];
+        const la = front > 0 ? a - kb : a + kb;
+        return [hip, knee, [knee[0] + 0.26 * sin(la), knee[1] - 0.26 * cos(la), z]];
+      });
+    },
+    snap() {
+      const w = L2W(this.T());
+      return [{ pts: [[-0.39, 0.53, 0], [0.39, 0.53, 0], [0.58, 0.6, 0]].map(w), joints: true }, ...this.legs().map((l) => ({ pts: l.map(w), joints: true }))];
+    },
+    emit() { return ap(this.T(), 0.55, 0.62, 0); },
+    cap() { return ap(this.T(), 0, 0.65, 0); },
+    ring() { return { c: [this.pos[0], this.pos[2]], r: 0.6, y0: 0.05, y1: 0.95 }; },
+    build() {
+      const T = this.T(), g = this.glow;
+      box(mul(T, tr(0, 0.53, 0)), 0.78, 0.2, 0.32, MAT.metal);
+      box(mul(T, tr(-0.02, 0.64, 0)), 0.44, 0.02, 0.1, MAT.accent, 0.25 + g * 0.7);
+      const Hd = mul(T, tr(0.47, 0.6, 0), rotY(this.head));
+      box(Hd, 0.22, 0.15, 0.2, MAT.dark);
+      box(mul(Hd, tr(0.11, 0.01, 0)), 0.02, 0.04, 0.14, MAT.accent, 0.4 + g * 0.6);
+      for (const [hip, knee, foot] of this.legs()) { limb(T, hip, knee, 0.07, 0.07, MAT.dark); limb(T, knee, foot, 0.055, 0.055, MAT.metal); }
+    },
+  };
+
+  const machines = [arm, amr, drone, human, dog];
+  const EVENTS = [
+    [1.45, arm, 'GRIP'], [2.65, arm, 'MOVE'], [3.9, arm, 'PLACE'],
+    [4.6, amr, 'DEPART'], [5.5, human, 'ZONE ENTRY'], [6.6, dog, 'CHECKPOINT'],
+    [7.1, human, 'INSPECT'], [7.6, amr, 'STAGED'], [8.4, drone, 'DISPATCH'],
+    [10.3, drone, 'PICKUP'], [12.45, drone, 'DROP'], [13.0, amr, 'DEPART'],
+    [14.2, dog, 'CHECKPOINT'], [17.6, amr, 'DOCKED'],
+  ];
+  const NE = EVENTS.length;
 
   // ---------- evidence crystals on the helix ----------
-  const HR = 2.3, HY0 = 1.05, HV = 0.2, HW = 0.42, PHI0 = -0.35, LIFE = 22, FLY = 1.1, CS = 0.5, GS = 0.12;
+  const HR = 2.3, HY0 = 1.05, HV = 0.2, HW = 0.42, PHI0 = -0.35, LIFE = 22, FLY = 1.1, CS = 0.5;
   const helix = (age) => { const a = PHI0 + age * HW; return [HR * cos(a), HY0 + age * HV, -HR * sin(a)]; };
   const crystals = [];
   let seq = 4096, sealed = 4096;
@@ -232,29 +484,39 @@ export function initWitness(canvas) {
     return [a * c.start[0] + b * m[0] + d * e[0], a * c.start[1] + b * m[1] + d * e[1], a * c.start[2] + b * m[2] + d * e[2]];
   }
 
-  function joints(ps, tip) {
-    return [[0, 0.18, 0], [0, 0.76, 0], plane(ps.th, 0, SY), plane(ps.th, ps.E[0], ps.E[1]), plane(ps.th, ps.Wr[0], ps.Wr[1]), tip.slice()];
+  // snapshot: world polylines, centred and scaled into crystal-local units
+  function normSnap(lines, cratePos) {
+    if (cratePos) {
+      const [x, y, z] = cratePos;
+      lines.push({ pts: [[x - 0.15, y + 0.15, z - 0.15], [x + 0.15, y + 0.15, z - 0.15], [x + 0.15, y + 0.15, z + 0.15], [x - 0.15, y + 0.15, z + 0.15]], loop: true, crate: true });
+    }
+    const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (const l of lines) for (const p of l.pts) for (let i = 0; i < 3; i++) { mn[i] = min(mn[i], p[i]); mx[i] = max(mx[i], p[i]); }
+    const c = [0, 1, 2].map((i) => (mn[i] + mx[i]) / 2);
+    const s = 0.36 / max(0.1, ...[0, 1, 2].map((i) => (mx[i] - mn[i]) / 2));
+    return lines.map((l) => ({ ...l, pts: l.pts.map((p) => [(p[0] - c[0]) * s, (p[1] - c[1]) * s, (p[2] - c[2]) * s]) }));
   }
 
-  function capture(kind) {
-    const rel = (p) => [p[0], p[1] - 1.35, p[2]];
+  function capture(m, label) {
+    const cp = m.cap().slice();
+    const near = hypot(crate.pos[0] - cp[0], crate.pos[1] - cp[1], crate.pos[2] - cp[2]) < 0.9;
     const c = {
-      id: ++seq, born: tau, kind, hash: `${hex(4)}…${hex(4)}`,
-      snap: joints(pose, cur.tip).map(rel), crate: rel(crate.pos),
-      start: [cur.tip[0], cur.tip[1] + 0.35, cur.tip[2]], spin: random() * PI * 2,
+      id: ++seq, born: tau, kind: label, who: m.name, hash: `${hex(4)}…${hex(4)}`,
+      snap: normSnap(m.snap(), near ? crate.pos : null), src: m,
+      start: [cp[0], cp[1] + 0.35, cp[2]], spin: random() * PI * 2,
       state: null, wp: null,
     };
     crystals.push(c);
     sealed++;
-    rings.push({ t: 0 });
-    flashes.push({ t: 0, p: cur.tip.slice() });
-    for (let i = 0; i < 56; i++) spawnMote({}, true, c);
+    m.glow = 1;
+    rings.push({ t: 0, ...m.ring() });
+    flashes.push({ t: 0, p: cp });
+    for (let i = 0; i < 56; i++) spawnMote({}, true, c, cp);
   }
 
-  // telemetry motes: spark off the arm's joints and get pulled into the newest crystal
-  function spawnMote(m, burst, target) {
-    const js = joints(pose, cur.tip);
-    const src = burst ? cur.tip : js[2 + ((random() * 4) | 0)];
+  // telemetry motes: spark off every machine and get pulled into the newest crystal
+  function spawnMote(m, burst, target, from) {
+    const src = from || machines[(random() * machines.length) | 0].emit();
     const a = random() * PI * 2, v = burst ? 1.4 + random() * 1.8 : 0.2 + random() * 0.5;
     Object.assign(m, {
       x: src[0], y: src[1], z: src[2],
@@ -272,10 +534,12 @@ export function initWitness(canvas) {
   // ---------- tamper story ----------
   const tam = { phase: 'idle', t: 0, next: 17.5, victim: null };
   function editSnap(s) {
-    const e = s.map((p) => p.slice());
-    e[3][1] += 0.55; e[3][0] += 0.35;
-    e[4][1] += 0.8; e[4][2] += 0.45;
-    e[5][1] += 0.9; e[5][2] += 0.6;
+    const e = s.filter((l) => !l.crate).map((l) => ({ ...l, pts: l.pts.map((p) => p.slice()) }));
+    const shift = (l, k) => { for (let i = Math.floor(l.pts.length / 2); i < l.pts.length; i++) { l.pts[i][0] += 0.14 * k; l.pts[i][1] += 0.16 * k; l.pts[i][2] += 0.1 * k; } };
+    let L = e[0];
+    for (const l of e) if (l.pts.length > L.pts.length) L = l;
+    shift(L, 1);
+    if (e.length > 1) shift(e[e.length - 1], -0.8);
     return e;
   }
   function stepTamper(dt) {
@@ -319,17 +583,19 @@ export function initWitness(canvas) {
 
   // ---------- simulation ----------
   let tau = 0;
-  let cur = task(0), pose = solve(cur.tip);
   const crate = { pos: [0, 0, 0], yaw: 0 };
-  let nextEv = 0;
-  const evTime = (n) => Math.floor(n / 3) * C + EVENTS[n % 3][0];
-  const telemetry = [];
-  for (let i = 0; i < 300; i++) telemetry.push(spawnMote({}, false));
-
-  function updateCrate() {
-    if (cur.carry) { crate.pos = [cur.tip[0], cur.tip[1] + 0.09, cur.tip[2]]; crate.yaw = cur.th; }
-    else { const pd = PADS[cur.at]; crate.pos = [pd.r * cos(pd.th), 0.33, -pd.r * sin(pd.th)]; crate.yaw = pd.th; }
+  function updateCrate(u) {
+    if (u < 1.5 || u >= 12.45) { crate.pos = [amr.pos[0], DECK + 0.15, amr.pos[2]]; crate.yaw = amr.yaw; }
+    else if (u < 3.9) { crate.pos = [arm.tip[0], arm.tip[1] + 0.09, arm.tip[2]]; crate.yaw = arm.k.th; }
+    else if (u < 10.3) { crate.pos = [PB[0], 0.33, PB[2]]; crate.yaw = -2.4; }
+    else { crate.pos = [drone.pos[0], drone.pos[1] - 0.33, drone.pos[2]]; crate.yaw = drone.yaw; }
   }
+  for (const m of machines) m.step(0, 1 / 30);
+  updateCrate(0);
+  let nextEv = 0;
+  const evTime = (n) => Math.floor(n / NE) * CYC + EVENTS[n % NE][0];
+  const telemetry = [];
+  for (let i = 0; i < 340; i++) telemetry.push(spawnMote({}, false));
 
   function moteStep(m, dt) {
     m.t += dt;
@@ -347,10 +613,10 @@ export function initWitness(canvas) {
 
   function step(dt) {
     tau += dt;
-    cur = task(tau);
-    pose = solve(cur.tip);
-    updateCrate();
-    while (tau >= evTime(nextEv)) { capture(EVENTS[nextEv % 3][1]); nextEv++; }
+    const u = tau % CYC;
+    for (const m of machines) { m.step(u, dt); m.glow *= Math.exp(-3 * dt); }
+    updateCrate(u);
+    while (tau >= evTime(nextEv)) { const [, m, label] = EVENTS[nextEv % NE]; capture(m, label); nextEv++; }
     for (let i = crystals.length - 1; i >= 0; i--) if (tau - crystals[i].born > LIFE) crystals.splice(i, 1);
     for (const c of crystals) c.wp = crystalPos(c);
     stepTamper(dt);
@@ -447,6 +713,22 @@ export function initWitness(canvas) {
     }
   }
 
+  // floor markings: the AMR lane around the seal and the quadruped's patrol route
+  function drawMarks() {
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 7]);
+    ctx.strokeStyle = 'rgba(229,72,77,0.3)';
+    strokePts(circle3D(0, 0.004, 0, RA_ - 0.4, 80), true);
+    strokePts(circle3D(0, 0.004, 0, RA_ + 0.4, 80), true);
+    ctx.setLineDash([2, 6]);
+    ctx.strokeStyle = 'rgba(190,188,182,0.32)';
+    const pts = [];
+    for (let i = 0; i <= 36; i++) { const q = onRing(DOG_R, lerp(DA - 0.1, DB + 0.1, i / 36), 0.004); proj(q[0], q[1], q[2]); pts.push(P[0], P[1]); }
+    strokePts(pts);
+    ctx.restore();
+  }
+
   // the dais is the seal: concentric sigil rings, a rotating timestamp ring, two pads
   function drawDais() {
     ground = [];
@@ -473,7 +755,7 @@ export function initWitness(canvas) {
     }
     ctx.stroke();
     // pads
-    for (const pd of PADS) {
+    for (const pd of [{ th: -2.4, r: 1.5 }]) {
       const T = mul(tr(pd.r * cos(pd.th), y, -pd.r * sin(pd.th)), rotY(pd.th));
       const pts = [];
       for (const [u, w] of [[-0.24, -0.24], [0.24, -0.24], [0.24, 0.24], [-0.24, 0.24]]) {
@@ -535,26 +817,25 @@ export function initWitness(canvas) {
       ctx.strokeStyle = rgba(col, 0.32 * al); ctx.stroke();
     }
 
-    // the frozen pose inside
+    // the frozen snapshot of the machine inside
     const snap = c.state === 'edited' ? c.edited : c.snap;
-    const G = mul(tr(p[0], p[1], p[2]), R, scl(GS * s));
-    const gp = snap.map((q) => { const w = ap(G, q[0], q[1], q[2]); proj(w[0], w[1], w[2]); return [P[0], P[1]]; });
     const ghost = c.state === 'edited' ? [255, 90, 90] : [255, 226, 226];
     ctx.strokeStyle = rgba(ghost, 0.92 * al);
-    ctx.lineWidth = max(1, rad * 0.09);
-    ctx.beginPath();
-    ctx.moveTo(gp[0][0], gp[0][1]);
-    for (let i = 1; i < gp.length; i++) ctx.lineTo(gp[i][0], gp[i][1]);
-    ctx.stroke();
-    ctx.fillStyle = rgba(ghost, al);
-    const jr = max(1, rad * 0.07);
-    for (let i = 2; i < gp.length; i++) { ctx.beginPath(); ctx.arc(gp[i][0], gp[i][1], jr, 0, PI * 2); ctx.fill(); }
-    if (c.state !== 'edited') {
-      const w = ap(G, c.crate[0], c.crate[1], c.crate[2]);
-      proj(w[0], w[1], w[2]);
-      const cr = max(1.5, rad * 0.14);
-      ctx.fillStyle = rgba([235, 230, 220], 0.8 * al);
-      ctx.fillRect(P[0] - cr / 2, P[1] - cr / 2, cr, cr);
+    ctx.lineWidth = max(1, rad * 0.07);
+    const jr = max(1, rad * 0.055);
+    for (const l of snap) {
+      const gp = [];
+      for (const q of l.pts) { const w = ap(T, q[0], q[1], q[2]); proj(w[0], w[1], w[2]); gp.push(P[0], P[1]); }
+      if (l.crate) { ctx.fillStyle = rgba([235, 230, 220], 0.55 * al); polyPath(gp); ctx.fill(); continue; }
+      ctx.beginPath();
+      ctx.moveTo(gp[0], gp[1]);
+      for (let i = 2; i < gp.length; i += 2) ctx.lineTo(gp[i], gp[i + 1]);
+      if (l.loop) ctx.closePath();
+      ctx.stroke();
+      if (l.joints) {
+        ctx.fillStyle = rgba(ghost, al);
+        for (let i = 2; i < gp.length; i += 2) { ctx.beginPath(); ctx.arc(gp[i], gp[i + 1], jr, 0, PI * 2); ctx.fill(); }
+      }
     }
 
     for (const f of faces) if (f.front) {
@@ -606,7 +887,8 @@ export function initWitness(canvas) {
   function drawTether(it) {
     const { c } = it;
     const k = (tau - c.born) / FLY;
-    const A = proj(cur.tip[0], cur.tip[1], cur.tip[2], [0, 0, 0]);
+    const sp = c.src.cap();
+    const A = proj(sp[0], sp[1], sp[2], [0, 0, 0]);
     const B = proj(c.wp[0], c.wp[1], c.wp[2], [0, 0, 0]);
     const g = ctx.createLinearGradient(A[0], A[1], B[0], B[1]);
     g.addColorStop(0, rgba([255, 120, 125], 0.7 * (1 - k)));
@@ -648,12 +930,12 @@ export function initWitness(canvas) {
   }
 
   function drawFx() {
-    // scan ring sweeping up the arm at each capture
+    // scan ring sweeping over the captured machine
     for (const r of rings) {
       const k = r.t / 0.8;
       ctx.strokeStyle = rgba([255, 99, 105], 0.85 * (1 - k));
       ctx.lineWidth = 1.6;
-      strokePts(circle3D(0, lerp(0.25, 2.9, ease(k)), 0, 1.0 + k * 0.5, 48), true);
+      strokePts(circle3D(r.c[0], lerp(r.y0, r.y1, ease(k)), r.c[1], r.r * (1 + k * 0.5), 40), true);
     }
     ctx.globalCompositeOperation = 'lighter';
     for (const f of flashes) {
@@ -726,17 +1008,17 @@ export function initWitness(canvas) {
     if (newest && !(tam.victim === newest)) {
       const age = tau - newest.born;
       const a = clamp((age - FLY + 0.1) / 0.25, 0, 1) * clamp((FLY + 1.5 - age) / 0.3, 0, 1);
-      tag(newest, `#0${newest.id}  ${newest.kind}  SEALED`, wide ? `sha256 ${newest.hash}` : null, [255, 140, 144], a);
+      tag(newest, `#0${newest.id}  ${newest.who} · ${newest.kind}`, wide ? `sha256 ${newest.hash}  SEALED` : null, [255, 140, 144], a);
     }
     const v = tam.victim;
     if (v) {
-      if (tam.phase !== 'restore') tag(v, `#0${v.id}  RECORD EDITED`, 'hash mismatch: chain broken', RED, tam.phase === 'glitch' ? (random() < 0.5 ? 1 : 0.3) : 1);
+      if (tam.phase !== 'restore') tag(v, `#0${v.id}  ${v.who} RECORD EDITED`, 'hash mismatch: chain broken', RED, tam.phase === 'glitch' ? (random() < 0.5 ? 1 : 0.3) : 1);
       else tag(v, `#0${v.id}  RESTORED`, 'from the sealed copy', [255, 255, 255], clamp((tam.t - 0.7) / 0.2, 0, 1));
     }
     // status line under the dais
-    const Q = proj(0, 0, 2.3, [0, 0, 0]);
+    const Q = proj(0, 0, 3.1, [0, 0, 0]);
     const y = min(Q[1] + 30, H - (wide ? 120 : 40));
-    let msg = `CHAIN INTACT  ·  ${sealed.toLocaleString('en-US')} EVENTS SEALED`, col = [255, 140, 144];
+    let msg = `CHAIN INTACT  ·  ${machines.length} MACHINES  ·  ${sealed.toLocaleString('en-US')} EVENTS SEALED`, col = [255, 140, 144];
     if (v && tam.phase === 'broken') { msg = `CHAIN BROKEN AT #0${v.id}`; col = RED; }
     if (v && tam.phase === 'restore') { msg = 'VERIFIED AGAINST THE SEALED COPY'; col = [255, 255, 255]; }
     ctx.font = MONO(wide ? 11 : 10);
@@ -760,12 +1042,12 @@ export function initWitness(canvas) {
     ctx.globalAlpha = 1;
 
     drawFloor();
+    drawMarks();
     drawDust();
     drawDais();
 
     items = [];
-    const glow = rings.length ? 1 - rings[rings.length - 1].t / 0.8 : 0;
-    buildArm(pose, cur.g, glow);
+    for (const m of machines) m.build();
     box(mul(tr(crate.pos[0], crate.pos[1], crate.pos[2]), rotY(crate.yaw)), 0.3, 0.3, 0.3, MAT.crate);
     const RA = [0, 0, 0], RB = [0, 0, 0];
     for (let i = 0; i < 90; i++) {
