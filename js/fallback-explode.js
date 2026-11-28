@@ -97,7 +97,7 @@ export function initFallbackExplode(section, oldCanvas, chipsEl) {
   else {
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) setActive(+e.target.dataset.layer);
-    }, { rootMargin: '-42% 0px -42% 0px' });
+    }, { rootMargin: matchMedia('(max-width: 900px)').matches ? '-70% 0px -22% 0px' : '-42% 0px -42% 0px' });
     steps.forEach((s) => io.observe(s));
   }
 

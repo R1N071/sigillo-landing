@@ -579,7 +579,8 @@ footer {
   .station-tag { display: none; }
   .pipeline { grid-template-columns: 1fr; }
   .pipeline-sticky {
-    height: 58dvh; top: 64px;
+    height: 46dvh; top: 64px; z-index: 3;
+    background: var(--bg);
     border-right: none; border-bottom: 1px solid var(--line-soft);
   }
   .layer-chips {

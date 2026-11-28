@@ -41,7 +41,7 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
     const g = new THREE.Group();
     build(g);
     g.position.y = y;
-    g.userData = { baseY: y, mats: [], edges: [], anchor: new THREE.Vector3(anchorOffset[0], y, anchorOffset[2]), op: 1 };
+    g.userData = { baseY: y, mats: [], edges: [], anchor: new THREE.Vector3(anchorOffset[0], 0, anchorOffset[2]), op: 1 };
     g.traverse((o) => {
       if (o.isMesh && o.material.transparent !== undefined) {
         o.material = o.material.clone();
@@ -160,12 +160,41 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    const s = Math.min(1, w / 640);
-    group.scale.setScalar(1.05 + s * 0.35);
+    // keep the model clear of the chips: beside them on desktop, above them on mobile
+    const cr = chipsEl.getBoundingClientRect(), sb = canvas.getBoundingClientRect();
+    const stacked = matchMedia('(max-width: 900px)').matches;
+    reserveX = stacked ? 0 : Math.max(0, cr.right - sb.left + 24);
+    const nav = document.querySelector('header, nav');
+    // the sticky panel may already start below the nav (mobile)
+    const stickTop = parseFloat(getComputedStyle(canvas.parentElement).top) || 0;
+    const top = Math.max(0, (nav ? nav.getBoundingClientRect().height : 64) - stickTop) + 12;
+    reserveY = stacked ? Math.max(0, sb.bottom - cr.top + 12) : 0;
+    camera.setViewOffset(w, h, -reserveX / 2, (reserveY - top) / 2, w, h);
+    usableAspect = Math.max(0.3, (w - reserveX) / Math.max(1, h - reserveY - top));
+    usableH = Math.max(0.3, (h - reserveY - top) / h);
   }
+  let reserveX = 0, reserveY = 0, usableAspect = 1, usableH = 1;
   place();
   new ResizeObserver(place).observe(canvas);
+
+  // fit the camera to the stack's current extent (it grows as the layers spread)
+  const VIEW_DIR = new THREE.Vector3(3.4, 2.5, 5.0).normalize();
+  const fitTarget = new THREE.Vector3();
+  let fitDist = 0;
+  function fitCamera(p, dt) {
+    const top = layers[0].position.y + 0.25;
+    const bottom = -0.3;
+    const cy = group.position.y + (top + bottom) / 2;
+    const hh = (top - bottom) / 2, rr = 1.6 + 0.3 * p;
+    const R = Math.hypot(hh, rr) * 1.06;
+    const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+    const half = Math.min(Math.atan(Math.tan(vHalf) * usableH), Math.atan(Math.tan(vHalf) * usableH * usableAspect));
+    const want = R / Math.sin(half);
+    fitDist = fitDist ? fitDist + (want - fitDist) * Math.min(dt * 5, 1) : want;
+    fitTarget.set(0, cy, 0);
+    camera.position.copy(VIEW_DIR).multiplyScalar(fitDist).add(fitTarget);
+    camera.lookAt(fitTarget);
+  }
 
   // ---------- active step ----------
   const chips = [...chipsEl.querySelectorAll('.chip')];
@@ -186,7 +215,7 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
       for (const e of entries) {
         if (e.isIntersecting) setActive(+e.target.dataset.layer);
       }
-    }, { rootMargin: '-42% 0px -42% 0px' });
+    }, { rootMargin: matchMedia('(max-width: 900px)').matches ? '-70% 0px -22% 0px' : '-42% 0px -42% 0px' });
     steps.forEach((s) => io.observe(s));
   }
 
@@ -196,6 +225,7 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
   linesSvg.appendChild(lineEl);
   const hideLines = matchMedia('(max-width: 900px)').matches;
 
+  const tmpV = new THREE.Vector3();
   function drawLeaders() {
     if (hideLines || active < 0) {
       lineEl.setAttribute('opacity', '0');
@@ -208,12 +238,21 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
     const x1 = cb.right - sb.left;
     const y1 = cb.top + cb.height / 2 - sb.top;
 
-    const anchor = layers[active].userData.anchor.clone();
-    layers[active].getWorldPosition ? null : null;
-    layers[active].localToWorld(anchor);
-    anchor.project(camera);
+    // end on the layer corner currently nearest the chips (the stack rotates)
+    const ext = layers[active].userData.anchor;
+    let anchor = null, best = Infinity;
+    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const v = tmpV.set(ext.x * sx, 0, ext.z * sz);
+      layers[active].localToWorld(v);
+      v.project(camera);
+      if (v.x < best) { best = v.x; anchor = (anchor || new THREE.Vector3()).copy(v); }
+    }
     const x2 = (anchor.x * 0.5 + 0.5) * sb.width;
     const y2 = (-anchor.y * 0.5 + 0.5) * sb.height;
+    if (anchor.z > 1 || x2 < x1 || x2 > sb.width || y2 < 0 || y2 > sb.height) {
+      lineEl.setAttribute('opacity', '0');
+      return;
+    }
 
     lineEl.setAttribute('x1', x1); lineEl.setAttribute('y1', y1);
     lineEl.setAttribute('x2', x2); lineEl.setAttribute('y2', y2);
@@ -258,8 +297,7 @@ export function initExplodeScene(section, canvas, linesSvg, chipsEl) {
     }
 
     layerRoot.rotation.y = (REDUCED ? 0.5 : t * 0.12) + p * 1.2;
-    camera.position.set(3.4, 2.4 + p * 0.7, 5.0 - p * 0.5);
-    camera.lookAt(0, 0.9 + p * 0.5, 0);
+    fitCamera(p, dt);
 
     renderer.render(scene, camera);
     drawLeaders();
